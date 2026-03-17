@@ -90,8 +90,12 @@ class _PlayerScreenState extends State<PlayerScreen> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text("${_posicion.inMinutes}:${(_posicion.inSeconds % 60).toString().padLeft(2, '0')}"),
-                      Text("${_total.inMinutes}:${(_total.inSeconds % 60).toString().padLeft(2, '0')}"),
+                      Text(
+                        "${_posicion.inMinutes}:${(_posicion.inSeconds % 60).toString().padLeft(2, '0')}",
+                      ),
+                      Text(
+                        "${_total.inMinutes}:${(_total.inSeconds % 60).toString().padLeft(2, '0')}",
+                      ),
                     ],
                   ),
                   SizedBox(height: 20),
@@ -99,18 +103,16 @@ class _PlayerScreenState extends State<PlayerScreen> {
                     CircularProgressIndicator(color: Colors.orange)
                   else
                     IconButton(
-                      icon: Icon(_player.playing ? Icons.pause : Icons.play_arrow, size: 50),
+                      icon: Icon(
+                        _player.playing ? Icons.pause : Icons.play_arrow,
+                        size: 50,
+                      ),
                       onPressed: () {
                         _player.playing ? _player.pause() : _player.play();
                       },
                     ),
                 ],
               ),
-            ),
-            SizedBox(height: 40),
-            Text(
-              "Categorías: Podcast, Programas, Curso Actual",
-              style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
             ),
           ],
         ),
