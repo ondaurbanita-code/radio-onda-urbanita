@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:just_audio/just_audio.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class PlayerScreen extends StatefulWidget {
   final String urlAudio;
@@ -21,7 +22,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
   void initState() {
     super.initState();
     _player.positionStream.listen((p) {
-      if (mounted) setState(() => _posicion = p);
+      if (mounted) {
+        setState(() => _posicion = p);
+        _guardarProgreso(p);
+      }
     });
     _player.durationStream.listen((d) {
       if (mounted) setState(() => _total = d ?? Duration.zero);
@@ -32,11 +36,28 @@ class _PlayerScreenState extends State<PlayerScreen> {
   Future<void> _prepararAudio() async {
     setState(() => _cargando = true);
     try {
+      final prefs = await SharedPreferences.getInstance();
+      int segundosGuardados = prefs.getInt('posicion_${widget.titulo}') ?? 0;
+      bool terminado = prefs.getBool('terminado_${widget.titulo}') ?? false;
+
       await _player.setUrl(widget.urlAudio);
+
+      if (!terminado && segundosGuardados > 0) {
+        await _player.seek(Duration(seconds: segundosGuardados));
+      }
     } catch (e) {
       debugPrint("error: $e");
     } finally {
       if (mounted) setState(() => _cargando = false);
+    }
+  }
+
+  Future<void> _guardarProgreso(Duration p) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt('posicion_${widget.titulo}', p.inSeconds);
+
+    if (_total.inSeconds > 0 && (_total.inSeconds - p.inSeconds) < 2) {
+      await prefs.setBool('terminado_${widget.titulo}', true);
     }
   }
 
@@ -53,7 +74,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
         backgroundColor: Colors.white,
         elevation: 0,
         iconTheme: IconThemeData(color: Colors.black),
-        title: Icon(Icons.star, color: Colors.orange),
+        title: Image.asset('LOGO_ONDA_URBANITA.png', height: 60),
         centerTitle: true,
       ),
       body: Padding(
@@ -73,7 +94,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
                 children: [
                   Text(
                     widget.titulo,
-                    style: TextStyle(fontWeight: FontWeight.bold),
+                    style: const TextStyle(fontWeight: FontWeight.bold),
                   ),
                   SizedBox(height: 20),
                   Slider(
@@ -83,9 +104,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
                     max: (_total.inSeconds > 0)
                         ? _total.inSeconds.toDouble()
                         : (_posicion.inSeconds.toDouble() + 1),
-                    onChanged: (value) {
-                      _player.seek(Duration(seconds: value.toInt()));
-                    },
+                    onChanged: (value) =>
+                        _player.seek(Duration(seconds: value.toInt())),
                   ),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -100,16 +120,15 @@ class _PlayerScreenState extends State<PlayerScreen> {
                   ),
                   SizedBox(height: 20),
                   if (_cargando)
-                    CircularProgressIndicator(color: Colors.orange)
+                    const CircularProgressIndicator(color: Colors.orange)
                   else
                     IconButton(
                       icon: Icon(
                         _player.playing ? Icons.pause : Icons.play_arrow,
                         size: 50,
                       ),
-                      onPressed: () {
-                        _player.playing ? _player.pause() : _player.play();
-                      },
+                      onPressed: () =>
+                          _player.playing ? _player.pause() : _player.play(),
                     ),
                 ],
               ),

@@ -11,7 +11,10 @@ class HomeScreen extends StatelessWidget {
         backgroundColor: Colors.white,
         elevation: 0,
         leading: Icon(Icons.menu, color: Colors.black),
-        title: Icon(Icons.star, color: Colors.yellow),
+        title: Image.asset(
+          'LOGO_ONDA_URBANITA.png',
+          height: 60,
+        ),
         centerTitle: true,
         actions: [
           TextButton(
