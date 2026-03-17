@@ -1,8 +1,19 @@
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
 import 'player_screen.dart';
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
+
+  Future<List> _obtenerAudios() async {
+    var url = Uri.parse("https://raw.githubusercontent.com/ondaurbanita-code/radio-onda-urbanita/main/lista_audios.json");
+    var respuesta = await http.get(url);
+    if (respuesta.statusCode == 200) {
+      return jsonDecode(respuesta.body);
+    }
+    return [];
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -13,12 +24,6 @@ class HomeScreen extends StatelessWidget {
         leading: Icon(Icons.menu, color: Colors.black),
         title: Icon(Icons.star, color: Colors.yellow),
         centerTitle: true,
-        actions: [
-          TextButton(
-            onPressed: () {},
-            child: Text("Mi cuenta", style: TextStyle(color: Colors.black)),
-          ),
-        ],
       ),
       body: Padding(
         padding: EdgeInsets.symmetric(horizontal: 20.0, vertical: 40.0),
@@ -39,10 +44,7 @@ class HomeScreen extends StatelessWidget {
     return GestureDetector(
       onTap: () {
         if (text == "Programas de radio") {
-          Navigator.push(
-            context,
-            MaterialPageRoute(builder: (context) => PlayerScreen()),
-          );
+          _mostrarListaAudios(context);
         }
       },
       child: Container(
@@ -53,12 +55,44 @@ class HomeScreen extends StatelessWidget {
           borderRadius: BorderRadius.circular(20),
         ),
         child: Center(
-          child: Text(
-            text,
-            style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-          ),
+          child: Text(text, style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
         ),
       ),
+    );
+  }
+
+  void _mostrarListaAudios(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      builder: (context) {
+        return FutureBuilder<List>(
+          future: _obtenerAudios(),
+          builder: (context, snapshot) {
+            if (!snapshot.hasData) return Center(child: CircularProgressIndicator());
+            var audios = snapshot.data!;
+            return ListView.builder(
+              itemCount: audios.length,
+              itemBuilder: (context, i) {
+                return ListTile(
+                  title: Text(audios[i]['titulo']),
+                  subtitle: Text(audios[i]['categoria']),
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => PlayerScreen(
+                          urlAudio: audios[i]['url'],
+                          titulo: audios[i]['titulo'],
+                        ),
+                      ),
+                    );
+                  },
+                );
+              },
+            );
+          },
+        );
+      },
     );
   }
 }
