@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "838886503379",
+    "project_id": "ondaurbanita-radio",
+    "storage_bucket": "ondaurbanita-radio.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:838886503379:android:0ffc87a8cfbad744237526",
+        "android_client_info": {
+          "package_name": "com.example.proyecto_ondaurbanita"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyB8BI6JKwpvaRkdMzbqEEDfh-kR33sZglw"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
