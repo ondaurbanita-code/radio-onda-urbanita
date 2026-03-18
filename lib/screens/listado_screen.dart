@@ -60,27 +60,27 @@ class _ListadoScreenState extends State<ListadoScreen> {
             );
           }
           if (snapshot.hasError || !snapshot.hasData) {
-            return const Center(child: Text("error al cargar programas"));
+            return Center(child: Text("rror al cargar programas"));
           }
 
           var audios = snapshot.data!;
           return ListView.builder(
-            padding: const EdgeInsets.all(20),
+            padding: EdgeInsets.all(20),
             itemCount: audios.length,
             itemBuilder: (context, i) {
               String titulo = audios[i]['titulo'];
 
               return Card(
-                margin: const EdgeInsets.only(bottom: 15),
+                margin: EdgeInsets.only(bottom: 15),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(15),
                 ),
                 child: ListTile(
-                  contentPadding: const EdgeInsets.symmetric(
+                  contentPadding: EdgeInsets.symmetric(
                     horizontal: 20,
                     vertical: 10,
                   ),
-                  leading: const Icon(
+                  leading: Icon(
                     Icons.mic,
                     color: Colors.orange,
                     size: 30,
