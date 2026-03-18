@@ -3,15 +3,13 @@ import 'package:just_audio/just_audio.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class PlayerScreen extends StatefulWidget {
-  final String urlAudio;
-  final String titulo;
-  final String urlImagen;
+  final List listaAudios;
+  final int indiceInicial;
 
   const PlayerScreen({
     super.key,
-    required this.urlAudio,
-    required this.titulo,
-    required this.urlImagen,
+    required this.listaAudios,
+    required this.indiceInicial,
   });
 
   @override
@@ -19,7 +17,8 @@ class PlayerScreen extends StatefulWidget {
 }
 
 class _PlayerScreenState extends State<PlayerScreen> {
-  final AudioPlayer _player = AudioPlayer();
+  late AudioPlayer _player;
+  late int _indiceActual;
   bool _cargando = false;
   Duration _posicion = Duration.zero;
   Duration _total = Duration.zero;
@@ -27,6 +26,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
   @override
   void initState() {
     super.initState();
+    _player = AudioPlayer();
+    _indiceActual = widget.indiceInicial;
     _player.positionStream.listen((p) {
       if (mounted) {
         setState(() => _posicion = p);
@@ -42,11 +43,13 @@ class _PlayerScreenState extends State<PlayerScreen> {
   Future<void> _prepararAudio() async {
     setState(() => _cargando = true);
     try {
+      final audio = widget.listaAudios[_indiceActual];
       final prefs = await SharedPreferences.getInstance();
-      int segs = prefs.getInt('posicion_${widget.titulo}') ?? 0;
-      bool term = prefs.getBool('terminado_${widget.titulo}') ?? false;
-      await _player.setUrl(widget.urlAudio);
+      int segs = prefs.getInt('posicion_${audio['titulo']}') ?? 0;
+      bool term = prefs.getBool('terminado_${audio['titulo']}') ?? false;
+      await _player.setUrl(audio['url']);
       if (!term && segs > 0) await _player.seek(Duration(seconds: segs));
+      _player.play();
     } catch (e) {
       debugPrint("error: $e");
     } finally {
@@ -54,11 +57,28 @@ class _PlayerScreenState extends State<PlayerScreen> {
     }
   }
 
+  void _anterior() {
+    if (_posicion.inSeconds > 1 || _indiceActual == 0) {
+      _player.seek(Duration.zero);
+    } else if (_indiceActual > 0) {
+      setState(() => _indiceActual--);
+      _prepararAudio();
+    }
+  }
+
+  void _siguiente() {
+    if (_indiceActual < widget.listaAudios.length - 1) {
+      setState(() => _indiceActual++);
+      _prepararAudio();
+    }
+  }
+
   Future<void> _guardarProgreso(Duration p) async {
+    final audio = widget.listaAudios[_indiceActual];
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setInt('posicion_${widget.titulo}', p.inSeconds);
+    await prefs.setInt('posicion_${audio['titulo']}', p.inSeconds);
     if (_total.inSeconds > 0 && (_total.inSeconds - p.inSeconds) < 2) {
-      await prefs.setBool('terminado_${widget.titulo}', true);
+      await prefs.setBool('terminado_${audio['titulo']}', true);
     }
   }
 
@@ -70,12 +90,13 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final audio = widget.listaAudios[_indiceActual];
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
         elevation: 0,
         backgroundColor: Colors.white,
-        iconTheme: const IconThemeData(color: Colors.black),
+        iconTheme: IconThemeData(color: Colors.black),
       ),
       body: Column(
         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
@@ -97,16 +118,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(30),
                 child: Image.network(
-                  widget.urlImagen,
-                  fit: BoxFit.cover,
-                  // Si la imagen de la URL falla, ponemos el logo de la app
-                  errorBuilder: (context, error, stackTrace) =>
+                  audio['imagen'],
+                  fit: BoxFit.fill,
+                  errorBuilder: (c, e, s) =>
                       Image.asset('LOGO_ONDA_URBANITA.png'),
-                  // Mientras carga, ponemos un circulito
-                  loadingBuilder: (context, child, loadingProgress) {
-                    if (loadingProgress == null) return child;
-                    return Center(child: CircularProgressIndicator());
-                  },
                 ),
               ),
             ),
@@ -114,8 +129,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
           Column(
             children: [
               Text(
-                widget.titulo,
-                style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+                audio['titulo'],
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
               ),
               Text(
                 "Onda Urbanita",
@@ -136,42 +152,51 @@ class _PlayerScreenState extends State<PlayerScreen> {
                       : (_posicion.inSeconds.toDouble() + 1),
                   onChanged: (v) => _player.seek(Duration(seconds: v.toInt())),
                 ),
-                Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 20),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        "${_posicion.inMinutes}:${(_posicion.inSeconds % 60).toString().padLeft(2, '0')}",
-                        style: const TextStyle(fontWeight: FontWeight.w500),
-                      ),
-                      Text(
-                        "${_total.inMinutes}:${(_total.inSeconds % 60).toString().padLeft(2, '0')}",
-                        style: const TextStyle(fontWeight: FontWeight.w500),
-                      ),
-                    ],
-                  ),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      "${_posicion.inMinutes}:${(_posicion.inSeconds % 60).toString().padLeft(2, '0')}",
+                    ),
+                    Text(
+                      "${_total.inMinutes}:${(_total.inSeconds % 60).toString().padLeft(2, '0')}",
+                    ),
+                  ],
                 ),
               ],
             ),
           ),
-          if (_cargando)
-            CircularProgressIndicator(color: Colors.orange)
-          else
-            CircleAvatar(
-              radius: 45,
-              backgroundColor: Colors.orange[800],
-              child: IconButton(
-                icon: Icon(
-                  _player.playing ? Icons.pause : Icons.play_arrow,
-                  size: 50,
-                  color: Colors.white,
-                ),
-                onPressed: () =>
-                    _player.playing ? _player.pause() : _player.play(),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              IconButton(
+                icon: Icon(Icons.skip_previous, size: 45, color: Colors.orange),
+                onPressed: _anterior,
               ),
-            ),
-          SizedBox(height: 10),
+              SizedBox(width: 20),
+              if (_cargando)
+                CircularProgressIndicator(color: Colors.orange)
+              else
+                CircleAvatar(
+                  radius: 40,
+                  backgroundColor: Colors.orange[800],
+                  child: IconButton(
+                    icon: Icon(
+                      _player.playing ? Icons.pause : Icons.play_arrow,
+                      size: 45,
+                      color: Colors.white,
+                    ),
+                    onPressed: () =>
+                        _player.playing ? _player.pause() : _player.play(),
+                  ),
+                ),
+              SizedBox(width: 20),
+              IconButton(
+                icon: Icon(Icons.skip_next, size: 45, color: Colors.orange),
+                onPressed: _siguiente,
+              ),
+            ],
+          ),
         ],
       ),
     );

@@ -100,14 +100,14 @@ class _ListadoScreenState extends State<ListadoScreen> {
                       return Icon(Icons.arrow_forward_ios, size: 14);
                     },
                   ),
+
                   onTap: () async {
                     await Navigator.push(
                       context,
                       MaterialPageRoute(
                         builder: (context) => PlayerScreen(
-                          urlAudio: audios[i]['url'],
-                          titulo: titulo,
-                          urlImagen: audios[i]['imagen'],
+                          listaAudios: audios,
+                          indiceInicial: i,
                         ),
                       ),
                     );

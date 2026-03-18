@@ -7,39 +7,151 @@ class HomeScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      extendBodyBehindAppBar: true,
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        title: Image.asset('LOGO_ONDA_URBANITA.png', height: 50),
-        centerTitle: true,
-      ),
-      body: Container(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [Colors.orange[400]!, Colors.orange[800]!],
-          ),
+      backgroundColor: Colors.grey[50],
+      drawer: Drawer(
+        child: ListView(
+          padding: EdgeInsets.zero,
+          children: [
+            DrawerHeader(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [Colors.orange[700]!, Colors.orange[400]!],
+                ),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Image.asset('LOGO_ONDA_URBANITA.png', height: 60),
+                  SizedBox(height: 10),
+                  Text(
+                    "Onda Urbanita",
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            ListTile(
+              leading: Icon(Icons.radio),
+              title: Text("Programas"),
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => ListadoScreen()),
+                );
+              },
+            ),
+            ListTile(
+              leading: Icon(Icons.info_outline),
+              title: Text("Quiénes somos"),
+              onTap: () => Navigator.pop(context),
+            ),
+            ListTile(
+              leading: Icon(Icons.contact_mail),
+              title: Text("Contacto"),
+              onTap: () => Navigator.pop(context),
+            ),
+            Divider(),
+            ListTile(
+              leading: Icon(Icons.settings),
+              title: Text("Ajustes"),
+              onTap: () => Navigator.pop(context),
+            ),
+          ],
         ),
-        child: Padding(
-          padding: EdgeInsets.symmetric(horizontal: 25.0),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              sectionButton("Quiénes somos", Icons.info_outline, context),
-              SizedBox(height: 25),
-              sectionButton("Programas de radio", Icons.radio, context),
-              SizedBox(height: 25),
-              sectionButton("Contacto", Icons.alternate_email, context),
-            ],
+      ),
+      appBar: AppBar(
+        backgroundColor: Colors.white,
+        elevation: 0.5,
+        iconTheme: IconThemeData(color: Colors.black),
+        title: Image.asset('LOGO_ONDA_URBANITA.png', height: 45),
+        centerTitle: true,
+        actions: [
+          IconButton(
+            onPressed: () {},
+            icon: Icon(Icons.account_circle, color: Colors.orange),
           ),
+        ],
+      ),
+      body: SingleChildScrollView(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              width: double.infinity,
+              padding: EdgeInsets.all(30),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.only(
+                  bottomLeft: Radius.circular(40),
+                  bottomRight: Radius.circular(40),
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.05),
+                    blurRadius: 10,
+                  ),
+                ],
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    "Hola,",
+                    style: TextStyle(fontSize: 18, color: Colors.grey[600]),
+                  ),
+                  Text(
+                    "Bienvenido a tu Radio",
+                    style: TextStyle(fontSize: 26, fontWeight: FontWeight.bold),
+                  ),
+                ],
+              ),
+            ),
+            SizedBox(height: 30),
+
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: Column(
+                children: [
+                  sectionButton(
+                    "Programas de radio",
+                    "Escucha nuestros últimos podcasts",
+                    Icons.play_circle_fill,
+                    context,
+                  ),
+                  SizedBox(height: 20),
+                  sectionButton(
+                    "Quiénes somos",
+                    "Conoce al equipo de la radio",
+                    Icons.people,
+                    context,
+                  ),
+                  SizedBox(height: 20),
+                  sectionButton(
+                    "Contacto",
+                    "Escríbenos tus sugerencias",
+                    Icons.send,
+                    context,
+                  ),
+                ],
+              ),
+            ),
+          ],
         ),
       ),
     );
   }
 
-  Widget sectionButton(String text, IconData icon, BuildContext context) {
+  Widget sectionButton(
+    String text,
+    String subtext,
+    IconData icon,
+    BuildContext context,
+  ) {
     return GestureDetector(
       onTap: () {
         if (text == "Programas de radio") {
@@ -50,32 +162,46 @@ class HomeScreen extends StatelessWidget {
         }
       },
       child: Container(
-        width: double.infinity,
-        height: 100,
+        padding: EdgeInsets.all(20),
         decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.9),
+          color: Colors.white,
           borderRadius: BorderRadius.circular(25),
+          border: Border.all(color: Colors.orange.withOpacity(0.1)),
           boxShadow: [
             BoxShadow(
-              color: Colors.black26,
+              color: Colors.black.withOpacity(0.03),
               blurRadius: 10,
               offset: Offset(0, 5),
             ),
           ],
         ),
         child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(icon, size: 35, color: Colors.orange[800]),
-            SizedBox(width: 15),
-            Text(
-              text,
-              style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-                color: Colors.orange[900],
+            Container(
+              padding: EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.orange[50],
+                shape: BoxShape.circle,
+              ),
+              child: Icon(icon, color: Colors.orange[800], size: 30),
+            ),
+            SizedBox(width: 20),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    text,
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  ),
+                  Text(
+                    subtext,
+                    style: TextStyle(fontSize: 14, color: Colors.grey[600]),
+                  ),
+                ],
               ),
             ),
+            Icon(Icons.chevron_right, color: Colors.grey),
           ],
         ),
       ),
