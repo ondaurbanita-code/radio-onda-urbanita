@@ -5,8 +5,14 @@ import 'package:shared_preferences/shared_preferences.dart';
 class PlayerScreen extends StatefulWidget {
   final String urlAudio;
   final String titulo;
+  final String urlImagen;
 
-  const PlayerScreen({super.key, required this.urlAudio, required this.titulo});
+  const PlayerScreen({
+    super.key,
+    required this.urlAudio,
+    required this.titulo,
+    required this.urlImagen,
+  });
 
   @override
   State<PlayerScreen> createState() => _PlayerScreenState();
@@ -69,30 +75,38 @@ class _PlayerScreenState extends State<PlayerScreen> {
       appBar: AppBar(
         elevation: 0,
         backgroundColor: Colors.white,
-        iconTheme: IconThemeData(color: Colors.black),
+        iconTheme: const IconThemeData(color: Colors.black),
       ),
       body: Column(
         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
         children: [
           Center(
             child: Container(
-              width: 250,
-              height: 250,
+              width: 280,
+              height: 280,
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(30),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.orange.withOpacity(0.3),
-                    blurRadius: 30,
+                    color: Colors.black12,
+                    blurRadius: 20,
                     spreadRadius: 5,
                   ),
                 ],
               ),
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(30),
-                child: Image.asset(
-                  'LOGO_ONDA_URBANITA.png',
-                  fit: BoxFit.contain,
+                child: Image.network(
+                  widget.urlImagen,
+                  fit: BoxFit.cover,
+                  // Si la imagen de la URL falla, ponemos el logo de la app
+                  errorBuilder: (context, error, stackTrace) =>
+                      Image.asset('LOGO_ONDA_URBANITA.png'),
+                  // Mientras carga, ponemos un circulito
+                  loadingBuilder: (context, child, loadingProgress) {
+                    if (loadingProgress == null) return child;
+                    return Center(child: CircularProgressIndicator());
+                  },
                 ),
               ),
             ),
@@ -104,8 +118,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
                 style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
               ),
               Text(
-                "Onda Urbanita - En directo",
-                style: TextStyle(color: Colors.grey),
+                "Onda Urbanita",
+                style: TextStyle(color: Colors.grey, letterSpacing: 1.2),
               ),
             ],
           ),
@@ -129,9 +143,11 @@ class _PlayerScreenState extends State<PlayerScreen> {
                     children: [
                       Text(
                         "${_posicion.inMinutes}:${(_posicion.inSeconds % 60).toString().padLeft(2, '0')}",
+                        style: const TextStyle(fontWeight: FontWeight.w500),
                       ),
                       Text(
                         "${_total.inMinutes}:${(_total.inSeconds % 60).toString().padLeft(2, '0')}",
+                        style: const TextStyle(fontWeight: FontWeight.w500),
                       ),
                     ],
                   ),
@@ -143,19 +159,19 @@ class _PlayerScreenState extends State<PlayerScreen> {
             CircularProgressIndicator(color: Colors.orange)
           else
             CircleAvatar(
-              radius: 40,
+              radius: 45,
               backgroundColor: Colors.orange[800],
               child: IconButton(
                 icon: Icon(
                   _player.playing ? Icons.pause : Icons.play_arrow,
-                  size: 45,
+                  size: 50,
                   color: Colors.white,
                 ),
                 onPressed: () =>
                     _player.playing ? _player.pause() : _player.play(),
               ),
             ),
-          SizedBox(height: 20),
+          SizedBox(height: 10),
         ],
       ),
     );

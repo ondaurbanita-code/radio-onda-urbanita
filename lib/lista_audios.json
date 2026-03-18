@@ -2,6 +2,7 @@
   {
     "titulo": "Mushashi Miyamoto",
     "categoria": "Radio",
-    "url": "https://raw.githubusercontent.com/ondaurbanita-code/radio-onda-urbanita/refs/heads/master/lib/audios/Musashi-Miyamoto-vs-Luchadores-(Baki)-El-Samurái-Legendario_MegaR.mp3"
+    "url": "https://raw.githubusercontent.com/ondaurbanita-code/radio-onda-urbanita/refs/heads/master/lib/audios/Musashi-Miyamoto-vs-Luchadores-(Baki)-El-Samurái-Legendario_MegaR.mp3",
+    "imagen": "https://raw.githubusercontent.com/ondaurbanita-code/radio-onda-urbanita/refs/heads/master/lib/portadas/mushashiMiyamotoRap.webp"
   }
 ]

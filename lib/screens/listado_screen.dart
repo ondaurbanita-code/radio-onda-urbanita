@@ -107,6 +107,7 @@ class _ListadoScreenState extends State<ListadoScreen> {
                         builder: (context) => PlayerScreen(
                           urlAudio: audios[i]['url'],
                           titulo: titulo,
+                          urlImagen: audios[i]['imagen'],
                         ),
                       ),
                     );
