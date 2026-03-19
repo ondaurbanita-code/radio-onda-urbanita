@@ -93,7 +93,7 @@ class _ListadoScreenState extends State<ListadoScreen> {
                     builder: (context, res) {
                       if (res.data == true) {
                         return Image.asset(
-                          'LOGO_ONDA_URBANITA.png',
+                          'logo.png',
                           height: 60,
                         );
                       }

@@ -121,7 +121,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
                   audio['imagen'],
                   fit: BoxFit.fill,
                   errorBuilder: (c, e, s) =>
-                      Image.asset('LOGO_ONDA_URBANITA.png'),
+                      Image.asset('logo.png'),
                 ),
               ),
             ),

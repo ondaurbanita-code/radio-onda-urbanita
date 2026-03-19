@@ -21,7 +21,7 @@ class HomeScreen extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Image.asset('LOGO_ONDA_URBANITA.png', height: 60),
+                  Image.asset('assets/logo.png', height: 60),
                   SizedBox(height: 10),
                   Text(
                     "Onda Urbanita",
@@ -68,7 +68,7 @@ class HomeScreen extends StatelessWidget {
         backgroundColor: Colors.white,
         elevation: 0.5,
         iconTheme: IconThemeData(color: Colors.black),
-        title: Image.asset('LOGO_ONDA_URBANITA.png', height: 45),
+        title: Image.asset('assets/logo.png', height: 45),
         centerTitle: true,
         actions: [
           IconButton(
@@ -114,7 +114,7 @@ class HomeScreen extends StatelessWidget {
             SizedBox(height: 30),
 
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20),
+              padding: EdgeInsets.symmetric(horizontal: 20),
               child: Column(
                 children: [
                   sectionButton(
