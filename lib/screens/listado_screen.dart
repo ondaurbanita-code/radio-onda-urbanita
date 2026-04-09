@@ -2,9 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'player_screen.dart';
-import 'login_screen.dart';
 
 String obtenerCursoActual() {
   DateTime ahora = DateTime.now();
@@ -24,9 +24,22 @@ class ListadoScreen extends StatefulWidget {
 }
 
 class _ListadoScreenState extends State<ListadoScreen> {
+  final String githubToken = "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";
+  final String repoOwner = "ondaurbanita-code";
+  final String repoName = "radio-onda-urbanita";
+
   Future<bool> _estaTerminado(String titulo) async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getBool('terminado_$titulo') ?? false;
+    User? user = FirebaseAuth.instance.currentUser;
+    if (user == null) return false;
+
+    final doc = await FirebaseFirestore.instance
+        .collection('usuarios')
+        .doc(user.uid)
+        .collection('progreso')
+        .doc(titulo)
+        .get();
+
+    return doc.exists && (doc.data()?['terminado'] ?? false);
   }
 
   Future<List> _obtenerAudios() async {
@@ -38,8 +51,90 @@ class _ListadoScreenState extends State<ListadoScreen> {
     return [];
   }
 
+  Future<void> eliminarPrograma(Map audio) async {
+    try {
+      String pathJson = "lib/lista_audios.json";
+      var urlJson = Uri.parse(
+        "https://api.github.com/repos/$repoOwner/$repoName/contents/$pathJson",
+      );
+
+      var resGet = await http.get(
+        urlJson,
+        headers: {"Authorization": "token $githubToken"},
+      );
+      var data = jsonDecode(resGet.body);
+      String shaJson = data['sha'];
+      List content = jsonDecode(
+        utf8.decode(base64.decode(data['content'].replaceAll('\n', ''))),
+      );
+
+      content.removeWhere(
+        (item) =>
+            item['titulo'] == audio['titulo'] && item['url'] == audio['url'],
+      );
+
+      await http.put(
+        urlJson,
+        headers: {"Authorization": "token $githubToken"},
+        body: jsonEncode({
+          "message": "Eliminar programa: ${audio['titulo']}",
+          "content": base64Encode(utf8.encode(jsonEncode(content))),
+          "sha": shaJson,
+        }),
+      );
+
+      String nombreArchivo = audio['url'].split('/').last;
+      var urlAudio = Uri.parse(
+        "https://api.github.com/repos/$repoOwner/$repoName/contents/lib/audios/$nombreArchivo",
+      );
+      var resAudio = await http.get(
+        urlAudio,
+        headers: {"Authorization": "token $githubToken"},
+      );
+
+      if (resAudio.statusCode == 200) {
+        await http.delete(
+          urlAudio,
+          headers: {"Authorization": "token $githubToken"},
+          body: jsonEncode({
+            "message": "Borrar archivo audio: $nombreArchivo",
+            "sha": jsonDecode(resAudio.body)['sha'],
+          }),
+        );
+      }
+
+      if (audio['imagen'] != null && !audio['imagen'].contains('default.png')) {
+        String nombreImg = audio['imagen'].split('/').last;
+        var urlImg = Uri.parse(
+          "https://api.github.com/repos/$repoOwner/$repoName/contents/lib/portadas/$nombreImg",
+        );
+        var resImg = await http.get(
+          urlImg,
+          headers: {"Authorization": "token $githubToken"},
+        );
+
+        if (resImg.statusCode == 200) {
+          await http.delete(
+            urlImg,
+            headers: {"Authorization": "token $githubToken"},
+            body: jsonEncode({
+              "message": "Borrar portada: $nombreImg",
+              "sha": jsonDecode(resImg.body)['sha'],
+            }),
+          );
+        }
+      }
+
+      setState(() {});
+    } catch (e) {
+      debugPrint("error al eliminar: $e");
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    User? currentUser = FirebaseAuth.instance.currentUser;
+
     return Scaffold(
       backgroundColor: Colors.grey[100],
       appBar: AppBar(
@@ -50,35 +145,25 @@ class _ListadoScreenState extends State<ListadoScreen> {
         backgroundColor: Colors.white,
         elevation: 0.5,
         iconTheme: IconThemeData(color: Colors.black),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.push(
-              context,
-              MaterialPageRoute(builder: (context) => LoginScreen()),
-            ),
-            child: Text(
-              "¿A qué espera? Inicie sesión",
-              style: TextStyle(color: Colors.orange[800], fontSize: 12),
-            ),
-          ),
-        ],
       ),
       body: FutureBuilder<List>(
         future: _obtenerAudios(),
         builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting)
+          if (snapshot.connectionState == ConnectionState.waiting) {
             return Center(
               child: CircularProgressIndicator(color: Colors.orange),
             );
-          if (snapshot.hasError || !snapshot.hasData)
+          }
+          if (snapshot.hasError || !snapshot.hasData) {
             return Center(child: Text("Error al cargar"));
+          }
 
           var audios = snapshot.data!;
           String cursoHoy = obtenerCursoActual();
           Map<String, List> grupos = {};
 
           for (var audio in audios) {
-            String c = audio['curso'] ?? "24/25";
+            String c = audio['curso'] ?? "23/24";
             if (!grupos.containsKey(c)) grupos[c] = [];
             grupos[c]!.add(audio);
           }
@@ -134,14 +219,54 @@ class _ListadoScreenState extends State<ListadoScreen> {
                           FutureBuilder<bool>(
                             future: _estaTerminado(titulo),
                             builder: (context, res) {
-                              if (res.data == true)
+                              if (res.data == true) {
                                 return Image.asset(
                                   'assets/logo.png',
                                   height: 25,
                                 );
-                              return Icon(Icons.arrow_forward_ios, size: 12);
+                              }
+                              return Icon(
+                                Icons.cancel,
+                                size: 12,
+                                color: Colors.grey,
+                              );
                             },
                           ),
+                          if (currentUser?.email == "ondaurbanita@gmail.com")
+                            IconButton(
+                              icon: Icon(
+                                Icons.delete_outline,
+                                color: Colors.red,
+                                size: 20,
+                              ),
+                              onPressed: () {
+                                showDialog(
+                                  context: context,
+                                  builder: (context) => AlertDialog(
+                                    title: Text("¿Eliminar?"),
+                                    content: Text(
+                                      "Se borrarán los archivos de GitHub.",
+                                    ),
+                                    actions: [
+                                      TextButton(
+                                        onPressed: () => Navigator.pop(context),
+                                        child: Text("No"),
+                                      ),
+                                      TextButton(
+                                        onPressed: () {
+                                          Navigator.pop(context);
+                                          eliminarPrograma(audio);
+                                        },
+                                        child: Text(
+                                          "Sí",
+                                          style: TextStyle(color: Colors.red),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                );
+                              },
+                            ),
                         ],
                       ),
                       onTap: () async {

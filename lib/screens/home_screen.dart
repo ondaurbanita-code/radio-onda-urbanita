@@ -1,12 +1,29 @@
 import 'package:flutter/material.dart';
+import 'admin_upload_screen.dart';
 import 'listado_screen.dart';
 import 'login_screen.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
-class HomeScreen extends StatelessWidget {
+class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
 
   @override
+  State<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends State<HomeScreen> {
+  @override
+  void initState() {
+    super.initState();
+    FirebaseAuth.instance.authStateChanges().listen((User? user) {
+      if (mounted) setState(() {});
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final user = FirebaseAuth.instance.currentUser;
+
     return Scaffold(
       backgroundColor: Colors.grey[50],
       drawer: Drawer(
@@ -57,11 +74,15 @@ class HomeScreen extends StatelessWidget {
               onTap: () => Navigator.pop(context),
             ),
             Divider(),
-            ListTile(
-              leading: Icon(Icons.settings),
-              title: Text("Ajustes"),
-              onTap: () => Navigator.pop(context),
-            ),
+            if (user != null)
+              ListTile(
+                leading: Icon(Icons.logout, color: Colors.red),
+                title: Text("Cerrar sesión"),
+                onTap: () async {
+                  await FirebaseAuth.instance.signOut();
+                  Navigator.pop(context);
+                },
+              ),
           ],
         ),
       ),
@@ -72,20 +93,25 @@ class HomeScreen extends StatelessWidget {
         title: Image.asset('assets/logo.png', height: 45),
         centerTitle: true,
         actions: [
-          IconButton(
-            onPressed: () {},
-            icon: Icon(Icons.account_circle, color: Colors.orange),
-          ),
-          TextButton(
-            onPressed: () => Navigator.push(
-              context,
-              MaterialPageRoute(builder: (context) => LoginScreen()),
+          if (user?.email == "ondaurbanita@gmail.com")
+            TextButton(
+              onPressed: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => AdminUploadScreen()),
+              ),
+              child: Text("Añadir programa nuevo", style: TextStyle(color: Colors.orange)),
             ),
-            child: Text(
-              "¿A qué espera? Inicie sesión",
-              style: TextStyle(color: Colors.orange, fontSize: 12),
+          if (user == null)
+            TextButton(
+              onPressed: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => LoginScreen()),
+              ),
+              child: Text(
+                "¿A qué espera? Inicie sesión",
+                style: TextStyle(color: Colors.orange, fontSize: 12),
+              ),
             ),
-          ),
         ],
       ),
       body: SingleChildScrollView(
@@ -116,18 +142,21 @@ class HomeScreen extends StatelessWidget {
                     style: TextStyle(fontSize: 18, color: Colors.grey[600]),
                   ),
                   Text(
-                    "Usuario",
+                    user?.displayName ?? "Usuario",
                     style: TextStyle(fontSize: 26, fontWeight: FontWeight.bold),
                   ),
                   Text(
                     "Bienvenido a tu Radio",
-                    style: TextStyle(fontSize: 26, fontWeight: FontWeight.bold),
+                    style: TextStyle(
+                      fontSize: 26,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.orange,
+                    ),
                   ),
                 ],
               ),
             ),
             SizedBox(height: 30),
-
             Padding(
               padding: EdgeInsets.symmetric(horizontal: 20),
               child: Column(
