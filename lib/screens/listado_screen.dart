@@ -4,6 +4,7 @@ import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import '../config/secrets.dart';
 import 'player_screen.dart';
 
 String obtenerCursoActual() {
@@ -24,7 +25,7 @@ class ListadoScreen extends StatefulWidget {
 }
 
 class _ListadoScreenState extends State<ListadoScreen> {
-  final String githubToken = "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";
+  final String githubToken = Secrets.githubToken;
   final String repoOwner = "ondaurbanita-code";
   final String repoName = "radio-onda-urbanita";
 

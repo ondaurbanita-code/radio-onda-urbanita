@@ -3,6 +3,8 @@ import 'package:file_picker/file_picker.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 
+import '../config/secrets.dart';
+
 class AdminUploadScreen extends StatefulWidget {
   const AdminUploadScreen({super.key});
 
@@ -20,7 +22,7 @@ class _AdminUploadScreenState extends State<AdminUploadScreen> {
   PlatformFile? archivoPortada;
   bool subiendo = false;
 
-  final String githubToken = "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";
+  final String githubToken = Secrets.githubToken;
   final String repoOwner = "ondaurbanita-code";
   final String repoName = "radio-onda-urbanita";
 
