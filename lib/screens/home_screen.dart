@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'listado_screen.dart';
+import 'login_screen.dart';
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
@@ -75,6 +76,16 @@ class HomeScreen extends StatelessWidget {
             onPressed: () {},
             icon: Icon(Icons.account_circle, color: Colors.orange),
           ),
+          TextButton(
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (context) => LoginScreen()),
+            ),
+            child: Text(
+              "¿A qué espera? Inicie sesión",
+              style: TextStyle(color: Colors.orange, fontSize: 12),
+            ),
+          ),
         ],
       ),
       body: SingleChildScrollView(
@@ -103,6 +114,10 @@ class HomeScreen extends StatelessWidget {
                   Text(
                     "Hola,",
                     style: TextStyle(fontSize: 18, color: Colors.grey[600]),
+                  ),
+                  Text(
+                    "Usuario",
+                    style: TextStyle(fontSize: 26, fontWeight: FontWeight.bold),
                   ),
                   Text(
                     "Bienvenido a tu Radio",
