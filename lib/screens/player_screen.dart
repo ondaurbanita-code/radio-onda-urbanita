@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class PlayerScreen extends StatefulWidget {
   final List listaAudios;
@@ -56,8 +57,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
     try {
       final audio = widget.listaAudios[_indiceActual];
       final user = FirebaseAuth.instance.currentUser;
+      final urlActual = audio['url'];
 
-      await _player.setUrl(audio['url']);
+      await _player.setUrl(urlActual);
 
       if (user != null) {
         final doc = await FirebaseFirestore.instance
@@ -70,9 +72,12 @@ class _PlayerScreenState extends State<PlayerScreen> {
         if (doc.exists) {
           bool term = doc.data()?['terminado'] ?? false;
           int segs = doc.data()?['posicion'] ?? 0;
+
           if (!term && segs > 0) {
             await _player.seek(Duration(seconds: segs));
             _ultimoSegundoGuardado = segs;
+          } else if (term) {
+            await _player.seek(Duration.zero);
           }
         }
       }
@@ -90,6 +95,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
     if (user == null) return;
 
     final audio = widget.listaAudios[_indiceActual];
+    final urlActual = audio['url'];
+    final bool terminado =
+        _total.inSeconds > 0 && (_total.inSeconds - _posicion.inSeconds) <= 3;
 
     await FirebaseFirestore.instance
         .collection('usuarios')
@@ -98,15 +106,23 @@ class _PlayerScreenState extends State<PlayerScreen> {
         .doc(audio['titulo'])
         .set({
           'posicion': _posicion.inSeconds,
-          'terminado':
-              (_total.inSeconds > 0 &&
-              (_total.inSeconds - _posicion.inSeconds) < 5),
+          'terminado': terminado,
+          'url_id': urlActual,
           'ultimoAcceso': FieldValue.serverTimestamp(),
         }, SetOptions(merge: true));
+
+    if (terminado) {
+      final prefs = await SharedPreferences.getInstance();
+      List<String> vistos = prefs.getStringList('podcasts_vistos') ?? [];
+      if (!vistos.contains(urlActual)) {
+        vistos.add(urlActual);
+        await prefs.setStringList('podcasts_vistos', vistos);
+      }
+    }
   }
 
   Future<void> _comprobarYGuardarFin(Duration p) async {
-    if (_total.inSeconds > 0 && (_total.inSeconds - p.inSeconds) < 2) {
+    if (_total.inSeconds > 0 && (_total.inSeconds - p.inSeconds) <= 2) {
       _guardarPosicionActual();
     }
   }

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:proyecto_ondaurbanita/screens/quienes_somos_screen.dart';
 import 'admin_upload_screen.dart';
 import 'listado_screen.dart';
 import 'login_screen.dart';
@@ -66,7 +67,13 @@ class _HomeScreenState extends State<HomeScreen> {
             ListTile(
               leading: Icon(Icons.info_outline),
               title: Text("Quiénes somos"),
-              onTap: () => Navigator.pop(context),
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => QuienesSomosScreen()),
+                );
+              },
             ),
             ListTile(
               leading: Icon(Icons.contact_mail),
@@ -95,11 +102,16 @@ class _HomeScreenState extends State<HomeScreen> {
         actions: [
           if (user?.email == "ondaurbanita@gmail.com")
             TextButton(
-              onPressed: () => Navigator.push(
-                context,
-                MaterialPageRoute(builder: (context) => AdminUploadScreen()),
+              onPressed: () async {
+                await Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => AdminUploadScreen()),
+                );
+              },
+              child: Text(
+                "Añadir programa nuevo",
+                style: TextStyle(color: Colors.orange),
               ),
-              child: Text("Añadir programa nuevo", style: TextStyle(color: Colors.orange)),
             ),
           if (user == null)
             TextButton(
@@ -202,6 +214,11 @@ class _HomeScreenState extends State<HomeScreen> {
           Navigator.push(
             context,
             MaterialPageRoute(builder: (context) => ListadoScreen()),
+          );
+        } else if (text == "Quiénes somos") {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (context) => QuienesSomosScreen()),
           );
         }
       },
