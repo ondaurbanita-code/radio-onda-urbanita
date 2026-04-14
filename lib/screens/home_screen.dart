@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:proyecto_ondaurbanita/screens/quienes_somos_screen.dart';
+import 'package:proyecto_ondaurbanita/screens/roles_screen.dart';
 import 'admin_upload_screen.dart';
+import 'contact_screen.dart';
 import 'listado_screen.dart';
 import 'login_screen.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -13,17 +16,39 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
+  String? _rol;
+
   @override
   void initState() {
     super.initState();
-    FirebaseAuth.instance.authStateChanges().listen((User? user) {
-      if (mounted) setState(() {});
+    _comprobarRol();
+    FirebaseAuth.instance.authStateChanges().listen((user) {
+      if (mounted) {
+        _comprobarRol();
+        setState(() {});
+      }
     });
+  }
+
+  void _comprobarRol() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user != null) {
+      var doc = await FirebaseFirestore.instance
+          .collection('roles')
+          .doc(user.email)
+          .get();
+      if (mounted && doc.exists) {
+        setState(() => _rol = doc.data()?['rol']);
+      } else {
+        setState(() => _rol = null);
+      }
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     final user = FirebaseAuth.instance.currentUser;
+    bool tienePermisos = _rol == 'admin' || _rol == 'superadmin';
 
     return Scaffold(
       backgroundColor: Colors.grey[50],
@@ -60,26 +85,25 @@ class _HomeScreenState extends State<HomeScreen> {
                 Navigator.pop(context);
                 Navigator.push(
                   context,
-                  MaterialPageRoute(builder: (context) => ListadoScreen()),
+                  MaterialPageRoute(builder: (c) => ListadoScreen()),
                 );
               },
             ),
-            ListTile(
-              leading: Icon(Icons.info_outline),
-              title: Text("Quiénes somos"),
-              onTap: () {
-                Navigator.pop(context);
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (context) => QuienesSomosScreen()),
-                );
-              },
-            ),
-            ListTile(
-              leading: Icon(Icons.contact_mail),
-              title: Text("Contacto"),
-              onTap: () => Navigator.pop(context),
-            ),
+
+            if (_rol == 'superadmin') ...[
+              Divider(),
+              ListTile(
+                leading: Icon(Icons.admin_panel_settings, color: Colors.blue),
+                title: Text("Gestionar Roles"),
+                onTap: () {
+                  Navigator.pop(context);
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (c) => GestionRolesScreen()),
+                  );
+                },
+              ),
+            ],
             Divider(),
             if (user != null)
               ListTile(
@@ -100,16 +124,14 @@ class _HomeScreenState extends State<HomeScreen> {
         title: Image.asset('assets/logo.png', height: 45),
         centerTitle: true,
         actions: [
-          if (user?.email == "ondaurbanita@gmail.com")
+          if (tienePermisos)
             TextButton(
-              onPressed: () async {
-                await Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (context) => AdminUploadScreen()),
-                );
-              },
+              onPressed: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (c) => AdminUploadScreen()),
+              ),
               child: Text(
-                "Añadir programa nuevo",
+                "Añadir programa",
                 style: TextStyle(color: Colors.orange),
               ),
             ),
@@ -117,10 +139,10 @@ class _HomeScreenState extends State<HomeScreen> {
             TextButton(
               onPressed: () => Navigator.push(
                 context,
-                MaterialPageRoute(builder: (context) => LoginScreen()),
+                MaterialPageRoute(builder: (c) => LoginScreen()),
               ),
               child: Text(
-                "¿A qué espera? Inicie sesión",
+                "Inicie sesión",
                 style: TextStyle(color: Colors.orange, fontSize: 12),
               ),
             ),
@@ -213,12 +235,17 @@ class _HomeScreenState extends State<HomeScreen> {
         if (text == "Programas de radio") {
           Navigator.push(
             context,
-            MaterialPageRoute(builder: (context) => ListadoScreen()),
+            MaterialPageRoute(builder: (c) => ListadoScreen()),
           );
         } else if (text == "Quiénes somos") {
           Navigator.push(
             context,
-            MaterialPageRoute(builder: (context) => QuienesSomosScreen()),
+            MaterialPageRoute(builder: (c) => QuienesSomosScreen()),
+          );
+        } else if (text == "Contacto") {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (c) => ContactoScreen()),
           );
         }
       },
@@ -227,7 +254,6 @@ class _HomeScreenState extends State<HomeScreen> {
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(25),
-          border: Border.all(color: Colors.orange.withOpacity(0.1)),
           boxShadow: [
             BoxShadow(
               color: Colors.black.withOpacity(0.03),
@@ -238,13 +264,9 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
         child: Row(
           children: [
-            Container(
-              padding: EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.orange[50],
-                shape: BoxShape.circle,
-              ),
-              child: Icon(icon, color: Colors.orange[800], size: 30),
+            CircleAvatar(
+              backgroundColor: Colors.orange[50],
+              child: Icon(icon, color: Colors.orange[800]),
             ),
             SizedBox(width: 20),
             Expanded(
