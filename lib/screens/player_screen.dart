@@ -5,7 +5,7 @@ class PlayerScreen extends StatefulWidget {
   final List listaAudios;
   final int indiceInicial;
 
-  const PlayerScreen({
+  PlayerScreen({
     super.key,
     required this.listaAudios,
     required this.indiceInicial,
@@ -18,7 +18,6 @@ class PlayerScreen extends StatefulWidget {
 class _PlayerScreenState extends State<PlayerScreen> {
   late AudioPlayer _player;
   late int _indiceActual;
-  bool _cargando = false;
   Duration _posicion = Duration.zero;
   Duration _total = Duration.zero;
 
@@ -35,11 +34,20 @@ class _PlayerScreenState extends State<PlayerScreen> {
   }
 
   Future<void> _prepararAudio() async {
-    setState(() => _cargando = true);
     final audio = widget.listaAudios[_indiceActual];
-    await _player.setUrl(audio['url']);
-    _player.play();
-    setState(() => _cargando = false);
+    try {
+      await _player.setUrl(audio['url']);
+      _player.play();
+    } catch (e) {
+      print("error: $e");
+    }
+  }
+
+  String _formatearTiempo(Duration duration) {
+    String dosDigitos(int n) => n.toString().padLeft(2, "0");
+    String minutos = dosDigitos(duration.inMinutes.remainder(60));
+    String segundos = dosDigitos(duration.inSeconds.remainder(60));
+    return "$minutos:$segundos";
   }
 
   @override
@@ -51,80 +59,150 @@ class _PlayerScreenState extends State<PlayerScreen> {
   @override
   Widget build(BuildContext context) {
     final audio = widget.listaAudios[_indiceActual];
+
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: Colors.grey[50],
       appBar: AppBar(
-        backgroundColor: Colors.white,
+        backgroundColor: Colors.transparent,
         elevation: 0,
         iconTheme: IconThemeData(color: Colors.black),
+        centerTitle: true,
+        title: Text(
+          "Reproduciendo",
+          style: TextStyle(color: Colors.grey, fontSize: 16),
+        ),
       ),
-      body: Column(
-        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-        children: [
-          Image.network(
-            audio['imagen'],
-            width: 250,
-            height: 250,
-            fit: BoxFit.cover,
-          ),
-          Column(
-            children: [
-              Text(
-                audio['titulo'],
-                style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+      body: Padding(
+        padding: EdgeInsets.symmetric(horizontal: 25),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(20),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.1),
+                    blurRadius: 20,
+                    offset: Offset(0, 10),
+                  ),
+                ],
               ),
-              if (audio['descripcion'] != null)
-                Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 40, vertical: 8),
-                  child: Text(
-                    audio['descripcion'],
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      color: Colors.grey[600],
-                      fontStyle: FontStyle.italic,
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(20),
+                child: Image.network(
+                  audio['imagen'],
+                  width: 300,
+                  height: 300,
+                  fit: BoxFit.cover,
+                ),
+              ),
+            ),
+            SizedBox(height: 40),
+            Text(
+              audio['titulo'],
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+            ),
+            SizedBox(height: 10),
+            Text(
+              "Onda Urbanita",
+              style: TextStyle(
+                fontSize: 16,
+                color: Colors.orange[800],
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+            SizedBox(height: 30),
+            SliderTheme(
+              data: SliderTheme.of(context).copyWith(
+                activeTrackColor: Colors.orange[700],
+                inactiveTrackColor: Colors.orange[100],
+                thumbColor: Colors.orange[800],
+                trackHeight: 4,
+              ),
+              child: Slider(
+                value: _posicion.inSeconds.toDouble(),
+                max: _total.inSeconds.toDouble() > 0
+                    ? _total.inSeconds.toDouble()
+                    : 1.0,
+                onChanged: (v) => _player.seek(Duration(seconds: v.toInt())),
+              ),
+            ),
+            Padding(
+              padding: EdgeInsets.symmetric(horizontal: 20),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    _formatearTiempo(_posicion),
+                    style: TextStyle(color: Colors.grey[600]),
+                  ),
+                  Text(
+                    _formatearTiempo(_total),
+                    style: TextStyle(color: Colors.grey[600]),
+                  ),
+                ],
+              ),
+            ),
+            SizedBox(height: 20),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              children: [
+                IconButton(
+                  icon: Icon(Icons.skip_previous_rounded, size: 45),
+                  onPressed: _indiceActual > 0
+                      ? () {
+                          setState(() {
+                            _indiceActual--;
+                            _prepararAudio();
+                          });
+                        }
+                      : null,
+                ),
+                GestureDetector(
+                  onTap: () => setState(
+                    () => _player.playing ? _player.pause() : _player.play(),
+                  ),
+                  child: Container(
+                    height: 80,
+                    width: 80,
+                    decoration: BoxDecoration(
+                      color: Colors.orange[800],
+                      shape: BoxShape.circle,
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.orange.withOpacity(0.3),
+                          blurRadius: 15,
+                          offset: Offset(0, 8),
+                        ),
+                      ],
+                    ),
+                    child: Icon(
+                      _player.playing
+                          ? Icons.pause_rounded
+                          : Icons.play_arrow_rounded,
+                      size: 50,
+                      color: Colors.white,
                     ),
                   ),
                 ),
-            ],
-          ),
-          Slider(
-            value: _posicion.inSeconds.toDouble(),
-            max: _total.inSeconds.toDouble() > 0
-                ? _total.inSeconds.toDouble()
-                : 1.0,
-            onChanged: (v) => _player.seek(Duration(seconds: v.toInt())),
-          ),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              IconButton(
-                icon: Icon(Icons.skip_previous, size: 40),
-                onPressed: () => setState(() {
-                  if (_indiceActual > 0) _indiceActual--;
-                  _prepararAudio();
-                }),
-              ),
-              IconButton(
-                icon: Icon(
-                  _player.playing ? Icons.pause_circle : Icons.play_circle,
-                  size: 60,
+                IconButton(
+                  icon: Icon(Icons.skip_next_rounded, size: 45),
+                  onPressed: _indiceActual < widget.listaAudios.length - 1
+                      ? () {
+                          setState(() {
+                            _indiceActual++;
+                            _prepararAudio();
+                          });
+                        }
+                      : null,
                 ),
-                onPressed: () => setState(
-                  () => _player.playing ? _player.pause() : _player.play(),
-                ),
-              ),
-              IconButton(
-                icon: Icon(Icons.skip_next, size: 40),
-                onPressed: () => setState(() {
-                  if (_indiceActual < widget.listaAudios.length - 1) {
-                    _indiceActual++;
-                  }
-                  _prepararAudio();
-                }),
-              ),
-            ],
-          ),
-        ],
+              ],
+            ),
+            SizedBox(height: 40),
+          ],
+        ),
       ),
     );
   }

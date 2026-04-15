@@ -34,8 +34,8 @@ class _HomeScreenState extends State<HomeScreen> {
     final user = FirebaseAuth.instance.currentUser;
     if (user != null) {
       var doc = await FirebaseFirestore.instance
-          .collection('roles')
-          .doc(user.email)
+          .collection('usuarios')
+          .doc(user.uid)
           .get();
       if (mounted && doc.exists) {
         setState(() => _rol = doc.data()?['rol']);
@@ -79,6 +79,28 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             ),
             ListTile(
+              leading: Icon(Icons.people),
+              title: Text("Quiénes somos"),
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (c) => QuienesSomosScreen()),
+                );
+              },
+            ),
+            ListTile(
+              leading: Icon(Icons.send),
+              title: Text("Contacto"),
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (c) => ContactoScreen()),
+                );
+              },
+            ),
+            ListTile(
               leading: Icon(Icons.radio),
               title: Text("Programas"),
               onTap: () {
@@ -89,7 +111,6 @@ class _HomeScreenState extends State<HomeScreen> {
                 );
               },
             ),
-
             if (_rol == 'superadmin') ...[
               Divider(),
               ListTile(
@@ -125,14 +146,11 @@ class _HomeScreenState extends State<HomeScreen> {
         centerTitle: true,
         actions: [
           if (tienePermisos)
-            TextButton(
+            IconButton(
+              icon: Icon(Icons.add_box_outlined, color: Colors.orange),
               onPressed: () => Navigator.push(
                 context,
                 MaterialPageRoute(builder: (c) => AdminUploadScreen()),
-              ),
-              child: Text(
-                "Añadir programa",
-                style: TextStyle(color: Colors.orange),
               ),
             ),
           if (user == null)
@@ -142,7 +160,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 MaterialPageRoute(builder: (c) => LoginScreen()),
               ),
               child: Text(
-                "Inicie sesión",
+                "¿A qué esperas? Inicia sesión",
                 style: TextStyle(color: Colors.orange, fontSize: 12),
               ),
             ),

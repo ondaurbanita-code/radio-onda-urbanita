@@ -23,6 +23,7 @@ class _ListadoScreenState extends State<ListadoScreen> {
   bool _cargando = true;
   List<String> _escuchados = [];
   String? _rol;
+  String? _cursoMasReciente;
 
   @override
   void initState() {
@@ -39,12 +40,17 @@ class _ListadoScreenState extends State<ListadoScreen> {
   Future<void> _cargarRol() async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
-    var doc = await FirebaseFirestore.instance
-        .collection('roles')
-        .doc(user.email)
-        .get();
-    if (mounted && doc.exists) {
-      setState(() => _rol = doc.data()?['rol']);
+    try {
+      var snapshot = await FirebaseFirestore.instance
+          .collection('usuarios')
+          .where('email', isEqualTo: user.email)
+          .limit(1)
+          .get();
+      if (mounted && snapshot.docs.isNotEmpty) {
+        setState(() => _rol = snapshot.docs.first.data()['rol']);
+      }
+    } catch (e) {
+      print(e);
     }
   }
 
@@ -73,8 +79,16 @@ class _ListadoScreenState extends State<ListadoScreen> {
     var respuesta = await http.get(url);
     if (mounted) {
       setState(() {
-        if (respuesta.statusCode == 200)
+        if (respuesta.statusCode == 200) {
           _audiosLocales = jsonDecode(respuesta.body);
+          if (_audiosLocales != null && _audiosLocales!.isNotEmpty) {
+            List<String> cursos = _audiosLocales!
+                .map((a) => (a['curso'] as String?) ?? "24/25")
+                .toList();
+            cursos.sort((a, b) => b.compareTo(a));
+            _cursoMasReciente = cursos.first;
+          }
+        }
         _cargando = false;
       });
     }
@@ -127,23 +141,25 @@ class _ListadoScreenState extends State<ListadoScreen> {
   Widget build(BuildContext context) {
     bool tienePermisos = _rol == 'admin' || _rol == 'superadmin';
     return Scaffold(
-      backgroundColor: Colors.grey[100],
+      backgroundColor: Colors.white,
       appBar: AppBar(
         title: Text(
           "Programas",
           style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold),
         ),
         backgroundColor: Colors.white,
+        elevation: 0.5,
+        iconTheme: IconThemeData(color: Colors.black),
         actions: [
           if (tienePermisos)
             IconButton(
-              icon: Icon(Icons.add, color: Colors.orange),
+              icon: Icon(Icons.add_circle_outline, color: Colors.orange),
               onPressed: () async {
-                final nuevo = await Navigator.push(
+                await Navigator.push(
                   context,
                   MaterialPageRoute(builder: (c) => AdminUploadScreen()),
                 );
-                if (nuevo != null) setState(() => _audiosLocales?.add(nuevo));
+                _inicializarLista();
               },
             ),
         ],
@@ -163,48 +179,73 @@ class _ListadoScreenState extends State<ListadoScreen> {
     }
     List<String> nombresCursos = grupos.keys.toList()
       ..sort((a, b) => b.compareTo(a));
+
     return ListView.builder(
-      padding: EdgeInsets.all(15),
+      padding: EdgeInsets.all(10),
       itemCount: nombresCursos.length,
       itemBuilder: (context, index) {
         String curso = nombresCursos[index];
-        return ExpansionTile(
-          title: Text(
-            "Curso $curso",
-            style: TextStyle(
-              fontWeight: FontWeight.bold,
-              color: Colors.orange[900],
-            ),
+        bool esElMasNuevo = curso == _cursoMasReciente;
+
+        return Card(
+          elevation: 0,
+          margin: EdgeInsets.only(bottom: 10),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(15),
+            side: BorderSide(color: Colors.grey[200]!),
           ),
-          children: grupos[curso]!
-              .map(
-                (audio) => ListTile(
-                  leading: _escuchados.contains(audio['url'])
-                      ? Icon(Icons.check_circle, color: Colors.green)
-                      : null,
-                  title: Text(audio['titulo']),
-                  trailing: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      if (tienePermisos)
-                        IconButton(
-                          icon: Icon(Icons.delete_outline, color: Colors.red),
-                          onPressed: () => eliminarPrograma(audio),
+          child: ExpansionTile(
+            initiallyExpanded: esElMasNuevo,
+            iconColor: Colors.orange,
+            textColor: Colors.orange[800],
+            title: Text(
+              "Curso $curso",
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+            ),
+            children: grupos[curso]!
+                .map(
+                  (audio) => ListTile(
+                    contentPadding: EdgeInsets.symmetric(
+                      horizontal: 20,
+                      vertical: 5,
+                    ),
+                    leading: _escuchados.contains(audio['url'])
+                        ? Icon(Icons.check_circle, color: Colors.green)
+                        : Icon(Icons.radio, color: Colors.grey[400]),
+                    title: Text(
+                      audio['titulo'],
+                      style: TextStyle(fontWeight: FontWeight.w500),
+                    ),
+                    subtitle: Text(
+                      audio['categoria'] ?? "Radio",
+                      style: TextStyle(fontSize: 12),
+                    ),
+                    trailing: tienePermisos
+                        ? IconButton(
+                            icon: Icon(
+                              Icons.delete_sweep,
+                              color: Colors.red[300],
+                            ),
+                            onPressed: () => eliminarPrograma(audio),
+                          )
+                        : Icon(
+                            Icons.arrow_forward_ios,
+                            size: 14,
+                            color: Colors.grey,
+                          ),
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (c) => PlayerScreen(
+                          listaAudios: grupos[curso]!,
+                          indiceInicial: grupos[curso]!.indexOf(audio),
                         ),
-                    ],
-                  ),
-                  onTap: () => Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (c) => PlayerScreen(
-                        listaAudios: grupos[curso]!,
-                        indiceInicial: grupos[curso]!.indexOf(audio),
                       ),
                     ),
                   ),
-                ),
-              )
-              .toList(),
+                )
+                .toList(),
+          ),
         );
       },
     );
