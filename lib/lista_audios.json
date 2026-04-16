@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 [
   {
     "titulo": "Baila Vini",
@@ -9,6 +8,3 @@
     "url": "https://raw.githubusercontent.com/ondaurbanita-code/radio-onda-urbanita/master/lib/audios/Baila_Vini.mp3"
   }
 ]
-=======
-[{"titulo":"Baila Vini","categoria":"Radio","curso":"21/22","youtube":"","imagen":"https://raw.githubusercontent.com/ondaurbanita-code/radio-onda-urbanita/master/lib/portadas/Baila_Vini.jpg","url":"https://raw.githubusercontent.com/ondaurbanita-code/radio-onda-urbanita/master/lib/audios/Baila_Vini.mp3"}]
->>>>>>> 31cd17f93fad39d746f63624aefc887c226022e7
