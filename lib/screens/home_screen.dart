@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:proyecto_ondaurbanita/screens/quienes_somos_screen.dart';
 import 'package:proyecto_ondaurbanita/screens/roles_screen.dart';
 import 'admin_upload_screen.dart';
@@ -17,36 +18,71 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   String? _rol;
+  String? _nombreFirestore;
+  bool _cargandoDatos = true;
 
   @override
   void initState() {
     super.initState();
-    _comprobarRol();
-    FirebaseAuth.instance.authStateChanges().listen((user) {
+    _inicializarApp();
+    _configurarNotificaciones();
+  }
+
+  Future<void> _configurarNotificaciones() async {
+    FirebaseMessaging messaging = FirebaseMessaging.instance;
+    await messaging.requestPermission();
+    await messaging.subscribeToTopic("anuncios_radio");
+  }
+
+  Future<void> _inicializarApp() async {
+    User? user = FirebaseAuth.instance.currentUser;
+    if (user != null) {
+      await _cargarDatosUsuario(user);
+    } else {
+      if (mounted) setState(() => _cargandoDatos = false);
+    }
+
+    FirebaseAuth.instance.authStateChanges().listen((User? user) {
       if (mounted) {
-        _comprobarRol();
-        setState(() {});
+        if (user != null) {
+          _cargarDatosUsuario(user);
+        } else {
+          setState(() {
+            _rol = null;
+            _nombreFirestore = null;
+            _cargandoDatos = false;
+          });
+        }
       }
     });
   }
 
-  void _comprobarRol() async {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user != null) {
+  Future<void> _cargarDatosUsuario(User user) async {
+    try {
       var doc = await FirebaseFirestore.instance
           .collection('usuarios')
           .doc(user.uid)
           .get();
       if (mounted && doc.exists) {
-        setState(() => _rol = doc.data()?['rol']);
-      } else {
-        setState(() => _rol = null);
+        setState(() {
+          _rol = doc.data()?['rol'];
+          _nombreFirestore = doc.data()?['nombre'];
+          _cargandoDatos = false;
+        });
       }
+    } catch (e) {
+      if (mounted) setState(() => _cargandoDatos = false);
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    if (_cargandoDatos) {
+      return Scaffold(
+        body: Center(child: CircularProgressIndicator(color: Colors.orange)),
+      );
+    }
+
     final user = FirebaseAuth.instance.currentUser;
     bool tienePermisos = _rol == 'admin' || _rol == 'superadmin';
 
@@ -131,8 +167,9 @@ class _HomeScreenState extends State<HomeScreen> {
                 leading: Icon(Icons.logout, color: Colors.red),
                 title: Text("Cerrar sesión"),
                 onTap: () async {
+                  setState(() => _cargandoDatos = true);
                   await FirebaseAuth.instance.signOut();
-                  Navigator.pop(context);
+                  if (mounted) Navigator.pop(context);
                 },
               ),
           ],
@@ -160,7 +197,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 MaterialPageRoute(builder: (c) => LoginScreen()),
               ),
               child: Text(
-                "¿A qué esperas? Inicia sesión",
+                "Inicie sesión",
                 style: TextStyle(color: Colors.orange, fontSize: 12),
               ),
             ),
@@ -194,7 +231,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     style: TextStyle(fontSize: 18, color: Colors.grey[600]),
                   ),
                   Text(
-                    user?.displayName ?? "Usuario",
+                    _nombreFirestore ?? "Usuario",
                     style: TextStyle(fontSize: 26, fontWeight: FontWeight.bold),
                   ),
                   Text(

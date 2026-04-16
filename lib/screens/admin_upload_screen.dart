@@ -12,6 +12,7 @@ class AdminUploadScreen extends StatefulWidget {
 class _AdminUploadScreenState extends State<AdminUploadScreen> {
   final tituloCtrl = TextEditingController();
   final categoriaCtrl = TextEditingController();
+  final colabCtrl = TextEditingController();
   final youtubeCtrl = TextEditingController();
   final cursoCtrl = TextEditingController();
   final descCtrl = TextEditingController();
@@ -50,6 +51,28 @@ class _AdminUploadScreenState extends State<AdminUploadScreen> {
     });
   }
 
+  Future<void> enviarNotificacion(String titulo) async {
+    try {
+      await http.post(
+        Uri.parse('https://fcm.googleapis.com/fcm/send'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'key=${Secrets.fcmServerKey}',
+        },
+        body: jsonEncode({
+          'to': '/topics/anuncios_radio',
+          'notification': {
+            'title': '¡Nuevo programa disponible!',
+            'body': 'Ya puedes escuchar: $titulo',
+            'sound': 'default',
+          },
+        }),
+      );
+    } catch (e) {
+      print(e);
+    }
+  }
+
   Future<void> subirAGithub() async {
     if (archivoAudio == null ||
         tituloCtrl.text.isEmpty ||
@@ -83,11 +106,13 @@ class _AdminUploadScreenState extends State<AdminUploadScreen> {
       }
 
       await actualizarJsonGithub(urlPortada, nombreLimpio);
+      await enviarNotificacion(tituloCtrl.text.trim());
       actualizarProgreso(1.0, "¡Publicado!");
 
       final nuevo = {
         "titulo": tituloCtrl.text.trim(),
         "categoria": categoriaCtrl.text.trim(),
+        "colaboradores": colabCtrl.text.trim(),
         "curso": cursoCtrl.text.trim(),
         "youtube": youtubeCtrl.text.trim(),
         "descripcion": descCtrl.text.trim(),
@@ -148,6 +173,7 @@ class _AdminUploadScreenState extends State<AdminUploadScreen> {
     content.add({
       "titulo": tituloCtrl.text.trim(),
       "categoria": categoriaCtrl.text.trim(),
+      "colaboradores": colabCtrl.text.trim(),
       "curso": cursoCtrl.text.trim(),
       "youtube": youtubeCtrl.text.trim(),
       "descripcion": descCtrl.text.trim(),
@@ -201,6 +227,10 @@ class _AdminUploadScreenState extends State<AdminUploadScreen> {
             decoration: InputDecoration(labelText: "Nombre"),
           ),
           TextField(
+            controller: colabCtrl,
+            decoration: InputDecoration(labelText: "Colaboradores (opcional)"),
+          ),
+          TextField(
             controller: categoriaCtrl,
             decoration: InputDecoration(labelText: "Categoría"),
           ),
@@ -210,12 +240,14 @@ class _AdminUploadScreenState extends State<AdminUploadScreen> {
           ),
           TextField(
             controller: youtubeCtrl,
-            decoration: InputDecoration(labelText: "Link YouTube"),
+            decoration: InputDecoration(labelText: "Link YouTube (Opcional)"),
           ),
           TextField(
             controller: descCtrl,
             maxLines: 2,
-            decoration: InputDecoration(labelText: "Descripción corta"),
+            decoration: InputDecoration(
+              labelText: "Descripción corta (Opcional)",
+            ),
           ),
           SizedBox(height: 20),
           ListTile(
@@ -232,7 +264,7 @@ class _AdminUploadScreenState extends State<AdminUploadScreen> {
           ElevatedButton(
             onPressed: subirAGithub,
             style: ElevatedButton.styleFrom(backgroundColor: Colors.orange),
-            child: Text("Subir a GitHub"),
+            child: Text("Subir el programa"),
           ),
         ],
       ),

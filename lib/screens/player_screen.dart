@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:just_audio/just_audio.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 class PlayerScreen extends StatefulWidget {
   final List listaAudios;
   final int indiceInicial;
 
-  PlayerScreen({
+  const PlayerScreen({
     super.key,
     required this.listaAudios,
     required this.indiceInicial,
@@ -20,26 +22,111 @@ class _PlayerScreenState extends State<PlayerScreen> {
   late int _indiceActual;
   Duration _posicion = Duration.zero;
   Duration _total = Duration.zero;
+  bool _progresoCargado = false;
 
   @override
   void initState() {
     super.initState();
     _player = AudioPlayer();
     _indiceActual = widget.indiceInicial;
-    _player.positionStream.listen((p) => setState(() => _posicion = p));
-    _player.durationStream.listen(
-      (d) => setState(() => _total = d ?? Duration.zero),
-    );
+
+    _player.positionStream.listen((p) {
+      if (mounted) {
+        setState(() => _posicion = p);
+        _guardarProgresoActual(p);
+      }
+    });
+
+    _player.durationStream.listen((d) {
+      if (mounted) setState(() => _total = d ?? Duration.zero);
+    });
+
+    _player.playerStateStream.listen((state) {
+      if (state.processingState == ProcessingState.completed) {
+        _registrarProgresoTerminado(true);
+      }
+    });
+
     _prepararAudio();
+  }
+
+  Future<void> _guardarProgresoActual(Duration p) async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null || _total == Duration.zero) return;
+
+    final audio = widget.listaAudios[_indiceActual];
+    final String tituloDoc = audio['titulo'].toString().replaceAll(' ', '_');
+
+    bool terminado = (_total.inSeconds - p.inSeconds) <= 3;
+
+    try {
+      await FirebaseFirestore.instance
+          .collection('usuarios')
+          .doc(user.uid)
+          .collection('progreso')
+          .doc(tituloDoc)
+          .set({
+            'segundos_actuales': p.inSeconds,
+            'terminado': terminado,
+            'ultimo_acceso': FieldValue.serverTimestamp(),
+          }, SetOptions(merge: true));
+    } catch (e) {
+      print(e);
+    }
+  }
+
+  Future<void> _registrarProgresoTerminado(bool terminado) async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+
+    final audio = widget.listaAudios[_indiceActual];
+    final String tituloDoc = audio['titulo'].toString().replaceAll(' ', '_');
+
+    try {
+      await FirebaseFirestore.instance
+          .collection('usuarios')
+          .doc(user.uid)
+          .collection('progreso')
+          .doc(tituloDoc)
+          .set({
+            'terminado': terminado,
+            'fecha': FieldValue.serverTimestamp(),
+          }, SetOptions(merge: true));
+    } catch (e) {
+      print(e);
+    }
   }
 
   Future<void> _prepararAudio() async {
     final audio = widget.listaAudios[_indiceActual];
+    _progresoCargado = false;
+
     try {
       await _player.setUrl(audio['url']);
+
+      final user = FirebaseAuth.instance.currentUser;
+      if (user != null) {
+        final String tituloDoc = audio['titulo'].toString().replaceAll(
+          ' ',
+          '_',
+        );
+        var doc = await FirebaseFirestore.instance
+            .collection('usuarios')
+            .doc(user.uid)
+            .collection('progreso')
+            .doc(tituloDoc)
+            .get();
+
+        if (doc.exists && doc.data()?['segundos_actuales'] != null) {
+          int seg = doc.data()!['segundos_actuales'];
+          await _player.seek(Duration(seconds: seg));
+        }
+      }
+
+      _progresoCargado = true;
       _player.play();
     } catch (e) {
-      print("error: $e");
+      print(e);
     }
   }
 
@@ -106,7 +193,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
             ),
             SizedBox(height: 10),
             Text(
-              "Onda Urbanita",
+              (audio['colaboradores'] != null &&
+                      audio['colaboradores'].toString().isNotEmpty)
+                  ? audio['colaboradores']
+                  : "Onda Urbanita",
               style: TextStyle(
                 fontSize: 16,
                 color: Colors.orange[800],
@@ -134,14 +224,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text(
-                    _formatearTiempo(_posicion),
-                    style: TextStyle(color: Colors.grey[600]),
-                  ),
-                  Text(
-                    _formatearTiempo(_total),
-                    style: TextStyle(color: Colors.grey[600]),
-                  ),
+                  Text(_formatearTiempo(_posicion)),
+                  Text(_formatearTiempo(_total)),
                 ],
               ),
             ),
@@ -170,13 +254,6 @@ class _PlayerScreenState extends State<PlayerScreen> {
                     decoration: BoxDecoration(
                       color: Colors.orange[800],
                       shape: BoxShape.circle,
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.orange.withOpacity(0.3),
-                          blurRadius: 15,
-                          offset: Offset(0, 8),
-                        ),
-                      ],
                     ),
                     child: Icon(
                       _player.playing

@@ -19,8 +19,7 @@ class OndaUrbanitaApp extends StatelessWidget {
       title: "Onda Urbanita",
       theme: ThemeData(
         primarySwatch: Colors.orange,
-        scaffoldBackgroundColor:
-            Colors.white,
+        scaffoldBackgroundColor: Colors.white,
       ),
       home: HomeScreen(),
     );

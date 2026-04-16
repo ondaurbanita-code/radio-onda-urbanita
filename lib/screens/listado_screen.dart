@@ -32,8 +32,8 @@ class _ListadoScreenState extends State<ListadoScreen> {
   }
 
   Future<void> _cargarDatos() async {
-    await _cargarRol();
-    await _cargarEscuchadosFirebase();
+    _cargarRol();
+    _cargarEscuchadosFirebase();
     await _inicializarLista();
   }
 
@@ -41,13 +41,12 @@ class _ListadoScreenState extends State<ListadoScreen> {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
     try {
-      var snapshot = await FirebaseFirestore.instance
+      var doc = await FirebaseFirestore.instance
           .collection('usuarios')
-          .where('email', isEqualTo: user.email)
-          .limit(1)
+          .doc(user.uid)
           .get();
-      if (mounted && snapshot.docs.isNotEmpty) {
-        setState(() => _rol = snapshot.docs.first.data()['rol']);
+      if (mounted && doc.exists) {
+        setState(() => _rol = doc.data()?['rol']);
       }
     } catch (e) {
       print(e);
@@ -57,18 +56,23 @@ class _ListadoScreenState extends State<ListadoScreen> {
   Future<void> _cargarEscuchadosFirebase() async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
-    final snapshot = await FirebaseFirestore.instance
-        .collection('usuarios')
-        .doc(user.uid)
-        .collection('progreso')
-        .where('terminado', isEqualTo: true)
-        .get();
-    if (mounted) {
-      setState(
-        () => _escuchados = snapshot.docs
-            .map((doc) => doc.data()['url_id'] as String)
-            .toList(),
-      );
+    try {
+      final snapshot = await FirebaseFirestore.instance
+          .collection('usuarios')
+          .doc(user.uid)
+          .collection('progreso')
+          .where('terminado', isEqualTo: true)
+          .get();
+
+      if (mounted) {
+        setState(() {
+          _escuchados = snapshot.docs
+              .map((doc) => doc.data()['url_id'].toString())
+              .toList();
+        });
+      }
+    } catch (e) {
+      print(e);
     }
   }
 
@@ -95,12 +99,35 @@ class _ListadoScreenState extends State<ListadoScreen> {
   }
 
   Future<void> eliminarPrograma(Map audio) async {
+    bool? confirmar = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text("¿Eliminar programa?"),
+        content: Text(
+          "Esta acción borrará '${audio['titulo']}' de la lista definitiva.",
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: Text("Cancelar"),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: Text("Eliminar", style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmar != true) return;
+
     setState(
       () => _audiosLocales?.removeWhere(
         (item) =>
             item['titulo'] == audio['titulo'] && item['url'] == audio['url'],
       ),
     );
+
     try {
       String pathJson = "lib/lista_audios.json";
       var urlJson = Uri.parse(
@@ -123,15 +150,12 @@ class _ListadoScreenState extends State<ListadoScreen> {
           urlJson,
           headers: {"Authorization": "token $githubToken"},
           body: jsonEncode({
-            "message": "Eliminar",
+            "message": "Eliminar programa: ${audio['titulo']}",
             "content": base64Encode(utf8.encode(jsonEncode(content))),
             "sha": data['sha'],
           }),
         );
       }
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text("Programa eliminado")));
     } catch (e) {
       _inicializarLista();
     }
@@ -202,49 +226,53 @@ class _ListadoScreenState extends State<ListadoScreen> {
               "Curso $curso",
               style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
             ),
-            children: grupos[curso]!
-                .map(
-                  (audio) => ListTile(
-                    contentPadding: EdgeInsets.symmetric(
-                      horizontal: 20,
-                      vertical: 5,
-                    ),
-                    leading: _escuchados.contains(audio['url'])
-                        ? Icon(Icons.check_circle, color: Colors.green)
-                        : Icon(Icons.radio, color: Colors.grey[400]),
-                    title: Text(
-                      audio['titulo'],
-                      style: TextStyle(fontWeight: FontWeight.w500),
-                    ),
-                    subtitle: Text(
-                      audio['categoria'] ?? "Radio",
-                      style: TextStyle(fontSize: 12),
-                    ),
-                    trailing: tienePermisos
-                        ? IconButton(
-                            icon: Icon(
-                              Icons.delete_sweep,
-                              color: Colors.red[300],
-                            ),
-                            onPressed: () => eliminarPrograma(audio),
-                          )
-                        : Icon(
-                            Icons.arrow_forward_ios,
-                            size: 14,
-                            color: Colors.grey,
-                          ),
-                    onTap: () => Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (c) => PlayerScreen(
-                          listaAudios: grupos[curso]!,
-                          indiceInicial: grupos[curso]!.indexOf(audio),
-                        ),
+            children: grupos[curso]!.map((audio) {
+              bool escuchado = _escuchados.contains(audio['url'].toString());
+              return ListTile(
+                contentPadding: EdgeInsets.symmetric(
+                  horizontal: 20,
+                  vertical: 5,
+                ),
+                leading: escuchado
+                    ? Icon(Icons.check_circle, color: Colors.green)
+                    : Icon(Icons.radio, color: Colors.grey[400]),
+                title: Text(
+                  audio['titulo'],
+                  style: TextStyle(fontWeight: FontWeight.w500),
+                ),
+                subtitle: Text(
+                  audio['descripcion'] != null &&
+                          audio['descripcion'].toString().isNotEmpty
+                      ? audio['descripcion']
+                      : (audio['categoria'] ?? "Radio"),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                ),
+                trailing: tienePermisos
+                    ? IconButton(
+                        icon: Icon(Icons.delete, color: Colors.red[300]),
+                        onPressed: () => eliminarPrograma(audio),
+                      )
+                    : Icon(
+                        Icons.arrow_forward_ios,
+                        size: 14,
+                        color: Colors.grey,
+                      ),
+                onTap: () async {
+                  await Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (c) => PlayerScreen(
+                        listaAudios: grupos[curso]!,
+                        indiceInicial: grupos[curso]!.indexOf(audio),
                       ),
                     ),
-                  ),
-                )
-                .toList(),
+                  );
+                  _cargarEscuchadosFirebase();
+                },
+              );
+            }).toList(),
           ),
         );
       },

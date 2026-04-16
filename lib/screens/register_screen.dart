@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'home_screen.dart';
 
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
@@ -40,31 +41,39 @@ class _RegisterScreenState extends State<RegisterScreen> {
       return;
     }
     if (!validarPassword(passController.text.trim())) {
-      setState(() => errorPass = "Usa 6-12 caracteres y un símbolo (!@#\$&*~.)");
+      setState(
+        () => errorPass = "Usa 6-12 caracteres y un símbolo (!@#\$&*~.)",
+      );
       return;
     }
 
     try {
       UserCredential userCredential = await FirebaseAuth.instance
           .createUserWithEmailAndPassword(
-        email: emailController.text.trim(),
-        password: passController.text.trim(),
-      );
+            email: emailController.text.trim(),
+            password: passController.text.trim(),
+          );
 
-      await userCredential.user?.updateDisplayName(nombreController.text.trim());
+      await userCredential.user?.updateDisplayName(
+        nombreController.text.trim(),
+      );
 
       await FirebaseFirestore.instance
           .collection('usuarios')
           .doc(userCredential.user?.uid)
           .set({
-        'nombre': nombreController.text.trim(),
-        'email': emailController.text.trim(),
-        'fechaRegistro': DateTime.now(),
-      });
+            'nombre': nombreController.text.trim(),
+            'email': emailController.text.trim(),
+            'rol': 'user',
+            'fechaRegistro': DateTime.now(),
+          });
 
       if (mounted) {
-        Navigator.pop(context);
-        Navigator.pop(context);
+        Navigator.pushAndRemoveUntil(
+          context,
+          MaterialPageRoute(builder: (c) => HomeScreen()),
+          (route) => false,
+        );
       }
     } catch (e) {
       setState(() {
@@ -130,7 +139,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 border: OutlineInputBorder(),
                 errorText: errorPass,
                 suffixIcon: IconButton(
-                  icon: Icon(mostrarPass ? Icons.visibility : Icons.visibility_off),
+                  icon: Icon(
+                    mostrarPass ? Icons.visibility : Icons.visibility_off,
+                  ),
                   onPressed: () => setState(() => mostrarPass = !mostrarPass),
                 ),
               ),

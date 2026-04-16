@@ -1,15 +1,12 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
 
     <queries>
         <intent>
             <action android:name="android.intent.action.VIEW" />
             <data android:scheme="https" />
-        </intent>
-        <intent>
-            <action android:name="android.intent.action.VIEW" />
-            <data android:scheme="http" />
         </intent>
         <intent>
             <action android:name="android.intent.action.PROCESS_TEXT"/>
@@ -18,7 +15,7 @@
     </queries>
 
     <application
-        android:label="proyecto_ondaurbanita"
+        android:label="Onda Urbanita"
         android:name="${applicationName}"
         android:icon="@mipmap/launcher_icon"
         android:usesCleartextTraffic="true">
