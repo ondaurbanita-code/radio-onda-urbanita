@@ -1,8 +1,13 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:proyecto_ondaurbanita/screens/quienes_somos_screen.dart';
+import 'package:proyecto_ondaurbanita/screens/roles_screen.dart';
 import 'admin_upload_screen.dart';
+import 'contact_screen.dart';
 import 'listado_screen.dart';
 import 'login_screen.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -12,17 +17,74 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
+  String? _rol;
+  String? _nombreFirestore;
+  bool _cargandoDatos = true;
+
   @override
   void initState() {
     super.initState();
+    _inicializarApp();
+    _configurarNotificaciones();
+  }
+
+  Future<void> _configurarNotificaciones() async {
+    FirebaseMessaging messaging = FirebaseMessaging.instance;
+    await messaging.requestPermission();
+    await messaging.subscribeToTopic("anuncios_radio");
+  }
+
+  Future<void> _inicializarApp() async {
+    User? user = FirebaseAuth.instance.currentUser;
+    if (user != null) {
+      await _cargarDatosUsuario(user);
+    } else {
+      if (mounted) setState(() => _cargandoDatos = false);
+    }
+
     FirebaseAuth.instance.authStateChanges().listen((User? user) {
-      if (mounted) setState(() {});
+      if (mounted) {
+        if (user != null) {
+          _cargarDatosUsuario(user);
+        } else {
+          setState(() {
+            _rol = null;
+            _nombreFirestore = null;
+            _cargandoDatos = false;
+          });
+        }
+      }
     });
+  }
+
+  Future<void> _cargarDatosUsuario(User user) async {
+    try {
+      var doc = await FirebaseFirestore.instance
+          .collection('usuarios')
+          .doc(user.uid)
+          .get();
+      if (mounted && doc.exists) {
+        setState(() {
+          _rol = doc.data()?['rol'];
+          _nombreFirestore = doc.data()?['nombre'];
+          _cargandoDatos = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) setState(() => _cargandoDatos = false);
+    }
   }
 
   @override
   Widget build(BuildContext context) {
+    if (_cargandoDatos) {
+      return Scaffold(
+        body: Center(child: CircularProgressIndicator(color: Colors.orange)),
+      );
+    }
+
     final user = FirebaseAuth.instance.currentUser;
+    bool tienePermisos = _rol == 'admin' || _rol == 'superadmin';
 
     return Scaffold(
       backgroundColor: Colors.grey[50],
@@ -53,34 +115,61 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             ),
             ListTile(
+              leading: Icon(Icons.people),
+              title: Text("Quiénes somos"),
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (c) => QuienesSomosScreen()),
+                );
+              },
+            ),
+            ListTile(
+              leading: Icon(Icons.send),
+              title: Text("Contacto"),
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (c) => ContactoScreen()),
+                );
+              },
+            ),
+            ListTile(
               leading: Icon(Icons.radio),
               title: Text("Programas"),
               onTap: () {
                 Navigator.pop(context);
                 Navigator.push(
                   context,
-                  MaterialPageRoute(builder: (context) => ListadoScreen()),
+                  MaterialPageRoute(builder: (c) => ListadoScreen()),
                 );
               },
             ),
-            ListTile(
-              leading: Icon(Icons.info_outline),
-              title: Text("Quiénes somos"),
-              onTap: () => Navigator.pop(context),
-            ),
-            ListTile(
-              leading: Icon(Icons.contact_mail),
-              title: Text("Contacto"),
-              onTap: () => Navigator.pop(context),
-            ),
+            if (_rol == 'superadmin') ...[
+              Divider(),
+              ListTile(
+                leading: Icon(Icons.admin_panel_settings, color: Colors.blue),
+                title: Text("Gestionar Roles"),
+                onTap: () {
+                  Navigator.pop(context);
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (c) => GestionRolesScreen()),
+                  );
+                },
+              ),
+            ],
             Divider(),
             if (user != null)
               ListTile(
                 leading: Icon(Icons.logout, color: Colors.red),
                 title: Text("Cerrar sesión"),
                 onTap: () async {
+                  setState(() => _cargandoDatos = true);
                   await FirebaseAuth.instance.signOut();
-                  Navigator.pop(context);
+                  if (mounted) Navigator.pop(context);
                 },
               ),
           ],
@@ -93,22 +182,22 @@ class _HomeScreenState extends State<HomeScreen> {
         title: Image.asset('assets/logo.png', height: 45),
         centerTitle: true,
         actions: [
-          if (user?.email == "ondaurbanita@gmail.com")
-            TextButton(
+          if (tienePermisos)
+            IconButton(
+              icon: Icon(Icons.add_box_outlined, color: Colors.orange),
               onPressed: () => Navigator.push(
                 context,
-                MaterialPageRoute(builder: (context) => AdminUploadScreen()),
+                MaterialPageRoute(builder: (c) => AdminUploadScreen()),
               ),
-              child: Text("Añadir programa nuevo", style: TextStyle(color: Colors.orange)),
             ),
           if (user == null)
             TextButton(
               onPressed: () => Navigator.push(
                 context,
-                MaterialPageRoute(builder: (context) => LoginScreen()),
+                MaterialPageRoute(builder: (c) => LoginScreen()),
               ),
               child: Text(
-                "¿A qué espera? Inicie sesión",
+                "Inicie sesión",
                 style: TextStyle(color: Colors.orange, fontSize: 12),
               ),
             ),
@@ -142,7 +231,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     style: TextStyle(fontSize: 18, color: Colors.grey[600]),
                   ),
                   Text(
-                    user?.displayName ?? "Usuario",
+                    _nombreFirestore ?? "Usuario",
                     style: TextStyle(fontSize: 26, fontWeight: FontWeight.bold),
                   ),
                   Text(
@@ -201,7 +290,17 @@ class _HomeScreenState extends State<HomeScreen> {
         if (text == "Programas de radio") {
           Navigator.push(
             context,
-            MaterialPageRoute(builder: (context) => ListadoScreen()),
+            MaterialPageRoute(builder: (c) => ListadoScreen()),
+          );
+        } else if (text == "Quiénes somos") {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (c) => QuienesSomosScreen()),
+          );
+        } else if (text == "Contacto") {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (c) => ContactoScreen()),
           );
         }
       },
@@ -210,7 +309,6 @@ class _HomeScreenState extends State<HomeScreen> {
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(25),
-          border: Border.all(color: Colors.orange.withOpacity(0.1)),
           boxShadow: [
             BoxShadow(
               color: Colors.black.withOpacity(0.03),
@@ -221,13 +319,9 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
         child: Row(
           children: [
-            Container(
-              padding: EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.orange[50],
-                shape: BoxShape.circle,
-              ),
-              child: Icon(icon, color: Colors.orange[800], size: 30),
+            CircleAvatar(
+              backgroundColor: Colors.orange[50],
+              child: Icon(icon, color: Colors.orange[800]),
             ),
             SizedBox(width: 20),
             Expanded(

@@ -20,10 +20,9 @@ class PlayerScreen extends StatefulWidget {
 class _PlayerScreenState extends State<PlayerScreen> {
   late AudioPlayer _player;
   late int _indiceActual;
-  bool _cargando = false;
   Duration _posicion = Duration.zero;
   Duration _total = Duration.zero;
-  int _ultimoSegundoGuardado = 0;
+  bool _progresoCargado = false;
 
   @override
   void initState() {
@@ -34,13 +33,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     _player.positionStream.listen((p) {
       if (mounted) {
         setState(() => _posicion = p);
-
-        if ((p.inSeconds - _ultimoSegundoGuardado).abs() >= 10) {
-          _ultimoSegundoGuardado = p.inSeconds;
-          _guardarPosicionActual();
-        }
-
-        _comprobarYGuardarFin(p);
+        _guardarProgresoActual(p);
       }
     });
 
@@ -48,85 +41,100 @@ class _PlayerScreenState extends State<PlayerScreen> {
       if (mounted) setState(() => _total = d ?? Duration.zero);
     });
 
+    _player.playerStateStream.listen((state) {
+      if (state.processingState == ProcessingState.completed) {
+        _registrarProgresoTerminado(true);
+      }
+    });
+
     _prepararAudio();
   }
 
-  Future<void> _prepararAudio() async {
-    setState(() => _cargando = true);
+  Future<void> _guardarProgresoActual(Duration p) async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null || _total == Duration.zero) return;
+
+    final audio = widget.listaAudios[_indiceActual];
+    final String tituloDoc = audio['titulo'].toString().replaceAll(' ', '_');
+
+    bool terminado = (_total.inSeconds - p.inSeconds) <= 3;
+
     try {
-      final audio = widget.listaAudios[_indiceActual];
-      final user = FirebaseAuth.instance.currentUser;
-
-      await _player.setUrl(audio['url']);
-
-      if (user != null) {
-        final doc = await FirebaseFirestore.instance
-            .collection('usuarios')
-            .doc(user.uid)
-            .collection('progreso')
-            .doc(audio['titulo'])
-            .get();
-
-        if (doc.exists) {
-          bool term = doc.data()?['terminado'] ?? false;
-          int segs = doc.data()?['posicion'] ?? 0;
-          if (!term && segs > 0) {
-            await _player.seek(Duration(seconds: segs));
-            _ultimoSegundoGuardado = segs;
-          }
-        }
-      }
-
-      _player.play();
+      await FirebaseFirestore.instance
+          .collection('usuarios')
+          .doc(user.uid)
+          .collection('progreso')
+          .doc(tituloDoc)
+          .set({
+            'segundos_actuales': p.inSeconds,
+            'terminado': terminado,
+            'ultimo_acceso': FieldValue.serverTimestamp(),
+          }, SetOptions(merge: true));
     } catch (e) {
-      debugPrint("error: $e");
-    } finally {
-      if (mounted) setState(() => _cargando = false);
+      print(e);
     }
   }
 
-  Future<void> _guardarPosicionActual() async {
+  Future<void> _registrarProgresoTerminado(bool terminado) async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
 
     final audio = widget.listaAudios[_indiceActual];
+    final String tituloDoc = audio['titulo'].toString().replaceAll(' ', '_');
 
-    await FirebaseFirestore.instance
-        .collection('usuarios')
-        .doc(user.uid)
-        .collection('progreso')
-        .doc(audio['titulo'])
-        .set({
-          'posicion': _posicion.inSeconds,
-          'terminado':
-              (_total.inSeconds > 0 &&
-              (_total.inSeconds - _posicion.inSeconds) < 5),
-          'ultimoAcceso': FieldValue.serverTimestamp(),
-        }, SetOptions(merge: true));
-  }
-
-  Future<void> _comprobarYGuardarFin(Duration p) async {
-    if (_total.inSeconds > 0 && (_total.inSeconds - p.inSeconds) < 2) {
-      _guardarPosicionActual();
+    try {
+      await FirebaseFirestore.instance
+          .collection('usuarios')
+          .doc(user.uid)
+          .collection('progreso')
+          .doc(tituloDoc)
+          .set({
+            'terminado': terminado,
+            'fecha': FieldValue.serverTimestamp(),
+          }, SetOptions(merge: true));
+    } catch (e) {
+      print(e);
     }
   }
 
-  void _anterior() async {
-    await _guardarPosicionActual();
-    if (_posicion.inSeconds > 1 || _indiceActual == 0) {
-      _player.seek(Duration.zero);
-    } else if (_indiceActual > 0) {
-      setState(() => _indiceActual--);
-      _prepararAudio();
+  Future<void> _prepararAudio() async {
+    final audio = widget.listaAudios[_indiceActual];
+    _progresoCargado = false;
+
+    try {
+      await _player.setUrl(audio['url']);
+
+      final user = FirebaseAuth.instance.currentUser;
+      if (user != null) {
+        final String tituloDoc = audio['titulo'].toString().replaceAll(
+          ' ',
+          '_',
+        );
+        var doc = await FirebaseFirestore.instance
+            .collection('usuarios')
+            .doc(user.uid)
+            .collection('progreso')
+            .doc(tituloDoc)
+            .get();
+
+        if (doc.exists && doc.data()?['segundos_actuales'] != null) {
+          int seg = doc.data()!['segundos_actuales'];
+          await _player.seek(Duration(seconds: seg));
+        }
+      }
+
+      _progresoCargado = true;
+      _player.play();
+    } catch (e) {
+      print(e);
     }
   }
 
-  void _siguiente() async {
-    await _guardarPosicionActual();
-    if (_indiceActual < widget.listaAudios.length - 1) {
-      setState(() => _indiceActual++);
-      _prepararAudio();
-    }
+  String _formatearTiempo(Duration duration) {
+    String dosDigitos(int n) => n.toString().padLeft(2, "0");
+    String minutos = dosDigitos(duration.inMinutes.remainder(60));
+    String segundos = dosDigitos(duration.inSeconds.remainder(60));
+    return "$minutos:$segundos";
   }
 
   @override
@@ -138,130 +146,138 @@ class _PlayerScreenState extends State<PlayerScreen> {
   @override
   Widget build(BuildContext context) {
     final audio = widget.listaAudios[_indiceActual];
-    return PopScope(
-      canPop: false,
-      onPopInvokedWithResult: (didPop, result) async {
-        if (didPop) return;
-        await _guardarPosicionActual();
-        if (context.mounted) Navigator.pop(context);
-      },
-      child: Scaffold(
-        backgroundColor: Colors.white,
-        appBar: AppBar(
-          elevation: 0,
-          backgroundColor: Colors.white,
-          iconTheme: IconThemeData(color: Colors.black),
+
+    return Scaffold(
+      backgroundColor: Colors.grey[50],
+      appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        iconTheme: IconThemeData(color: Colors.black),
+        centerTitle: true,
+        title: Text(
+          "Reproduciendo",
+          style: TextStyle(color: Colors.grey, fontSize: 16),
         ),
-        body: Column(
-          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+      ),
+      body: Padding(
+        padding: EdgeInsets.symmetric(horizontal: 25),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Center(
-              child: Container(
-                width: 280,
-                height: 280,
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(30),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black12,
-                      blurRadius: 20,
-                      spreadRadius: 5,
-                    ),
-                  ],
-                ),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(30),
-                  child: Image.network(
-                    audio['imagen'],
-                    fit: BoxFit.fill,
-                    errorBuilder: (c, e, s) => Image.asset('assets/logo.png'),
-                  ),
-                ),
-              ),
-            ),
-            Column(
-              children: [
-                Text(
-                  audio['titulo'],
-                  textAlign: TextAlign.center,
-                  style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
-                ),
-                Text(
-                  "Onda Urbanita",
-                  style: TextStyle(color: Colors.grey, letterSpacing: 1.2),
-                ),
-              ],
-            ),
-            Padding(
-              padding: EdgeInsets.symmetric(horizontal: 30),
-              child: Column(
-                children: [
-                  Slider(
-                    activeColor: Colors.orange[800],
-                    inactiveColor: Colors.orange[100],
-                    value: _posicion.inSeconds.toDouble(),
-                    max: (_total.inSeconds > 0)
-                        ? _total.inSeconds.toDouble()
-                        : (_posicion.inSeconds.toDouble() + 1),
-                    onChanged: (v) =>
-                        _player.seek(Duration(seconds: v.toInt())),
-                  ),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        "${_posicion.inMinutes}:${(_posicion.inSeconds % 60).toString().padLeft(2, '0')}",
-                      ),
-                      Text(
-                        "${_total.inMinutes}:${(_total.inSeconds % 60).toString().padLeft(2, '0')}",
-                      ),
-                    ],
+            Container(
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(20),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.1),
+                    blurRadius: 20,
+                    offset: Offset(0, 10),
                   ),
                 ],
               ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(20),
+                child: Image.network(
+                  audio['imagen'],
+                  width: 300,
+                  height: 300,
+                  fit: BoxFit.cover,
+                ),
+              ),
             ),
+            SizedBox(height: 40),
+            Text(
+              audio['titulo'],
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+            ),
+            SizedBox(height: 10),
+            Text(
+              (audio['colaboradores'] != null &&
+                      audio['colaboradores'].toString().isNotEmpty)
+                  ? audio['colaboradores']
+                  : "Onda Urbanita",
+              style: TextStyle(
+                fontSize: 16,
+                color: Colors.orange[800],
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+            SizedBox(height: 30),
+            SliderTheme(
+              data: SliderTheme.of(context).copyWith(
+                activeTrackColor: Colors.orange[700],
+                inactiveTrackColor: Colors.orange[100],
+                thumbColor: Colors.orange[800],
+                trackHeight: 4,
+              ),
+              child: Slider(
+                value: _posicion.inSeconds.toDouble(),
+                max: _total.inSeconds.toDouble() > 0
+                    ? _total.inSeconds.toDouble()
+                    : 1.0,
+                onChanged: (v) => _player.seek(Duration(seconds: v.toInt())),
+              ),
+            ),
+            Padding(
+              padding: EdgeInsets.symmetric(horizontal: 20),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(_formatearTiempo(_posicion)),
+                  Text(_formatearTiempo(_total)),
+                ],
+              ),
+            ),
+            SizedBox(height: 20),
             Row(
-              mainAxisAlignment: MainAxisAlignment.center,
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
               children: [
                 IconButton(
-                  icon: Icon(
-                    Icons.skip_previous,
-                    size: 45,
-                    color: Colors.orange,
-                  ),
-                  onPressed: _anterior,
-                ),
-                SizedBox(width: 20),
-                if (_cargando)
-                  CircularProgressIndicator(color: Colors.orange)
-                else
-                  CircleAvatar(
-                    radius: 40,
-                    backgroundColor: Colors.orange[800],
-                    child: IconButton(
-                      icon: Icon(
-                        _player.playing ? Icons.pause : Icons.play_arrow,
-                        size: 45,
-                        color: Colors.white,
-                      ),
-                      onPressed: () async {
-                        if (_player.playing) {
-                          await _player.pause();
-                          await _guardarPosicionActual();
-                        } else {
-                          await _player.play();
+                  icon: Icon(Icons.skip_previous_rounded, size: 45),
+                  onPressed: _indiceActual > 0
+                      ? () {
+                          setState(() {
+                            _indiceActual--;
+                            _prepararAudio();
+                          });
                         }
-                        setState(() {});
-                      },
+                      : null,
+                ),
+                GestureDetector(
+                  onTap: () => setState(
+                    () => _player.playing ? _player.pause() : _player.play(),
+                  ),
+                  child: Container(
+                    height: 80,
+                    width: 80,
+                    decoration: BoxDecoration(
+                      color: Colors.orange[800],
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(
+                      _player.playing
+                          ? Icons.pause_rounded
+                          : Icons.play_arrow_rounded,
+                      size: 50,
+                      color: Colors.white,
                     ),
                   ),
-                SizedBox(width: 20),
+                ),
                 IconButton(
-                  icon: Icon(Icons.skip_next, size: 45, color: Colors.orange),
-                  onPressed: _siguiente,
+                  icon: Icon(Icons.skip_next_rounded, size: 45),
+                  onPressed: _indiceActual < widget.listaAudios.length - 1
+                      ? () {
+                          setState(() {
+                            _indiceActual++;
+                            _prepararAudio();
+                          });
+                        }
+                      : null,
                 ),
               ],
             ),
+            SizedBox(height: 40),
           ],
         ),
       ),

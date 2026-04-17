@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'register_screen.dart';
+import 'home_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -28,7 +29,13 @@ class _LoginScreenState extends State<LoginScreen> {
         email: emailController.text.trim(),
         password: passController.text.trim(),
       );
-      if (mounted) Navigator.pop(context);
+      if (mounted) {
+        Navigator.pushAndRemoveUntil(
+          context,
+          MaterialPageRoute(builder: (c) => HomeScreen()),
+          (route) => false,
+        );
+      }
     } catch (e) {
       setState(() {
         String err = e.toString().toLowerCase();

@@ -1,21 +1,11 @@
 import 'package:flutter/material.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../config/secrets.dart';
 import 'player_screen.dart';
-
-String obtenerCursoActual() {
-  DateTime ahora = DateTime.now();
-  int year = ahora.year;
-  if (ahora.month < 9) {
-    return "${(year - 1).toString().substring(2)}/${year.toString().substring(2)}";
-  } else {
-    return "${year.toString().substring(2)}/${(year + 1).toString().substring(2)}";
-  }
-}
+import 'admin_upload_screen.dart';
 
 class ListadoScreen extends StatefulWidget {
   const ListadoScreen({super.key});
@@ -29,115 +19,153 @@ class _ListadoScreenState extends State<ListadoScreen> {
   final String repoOwner = "ondaurbanita-code";
   final String repoName = "radio-onda-urbanita";
 
-  Future<bool> _estaTerminado(String titulo) async {
-    User? user = FirebaseAuth.instance.currentUser;
-    if (user == null) return false;
+  List? _audiosLocales;
+  bool _cargando = true;
+  List<String> _escuchados = [];
+  String? _rol;
+  String? _cursoMasReciente;
 
-    final doc = await FirebaseFirestore.instance
-        .collection('usuarios')
-        .doc(user.uid)
-        .collection('progreso')
-        .doc(titulo)
-        .get();
-
-    return doc.exists && (doc.data()?['terminado'] ?? false);
+  @override
+  void initState() {
+    super.initState();
+    _cargarDatos();
   }
 
-  Future<List> _obtenerAudios() async {
+  Future<void> _cargarDatos() async {
+    _cargarRol();
+    _cargarEscuchadosFirebase();
+    await _inicializarLista();
+  }
+
+  Future<void> _cargarRol() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+    try {
+      var doc = await FirebaseFirestore.instance
+          .collection('usuarios')
+          .doc(user.uid)
+          .get();
+      if (mounted && doc.exists) {
+        setState(() => _rol = doc.data()?['rol']);
+      }
+    } catch (e) {
+      print(e);
+    }
+  }
+
+  Future<void> _cargarEscuchadosFirebase() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+    try {
+      final snapshot = await FirebaseFirestore.instance
+          .collection('usuarios')
+          .doc(user.uid)
+          .collection('progreso')
+          .where('terminado', isEqualTo: true)
+          .get();
+
+      if (mounted) {
+        setState(() {
+          _escuchados = snapshot.docs
+              .map((doc) => doc.data()['url_id'].toString())
+              .toList();
+        });
+      }
+    } catch (e) {
+      print(e);
+    }
+  }
+
+  Future<void> _inicializarLista() async {
     var url = Uri.parse(
-      "https://raw.githubusercontent.com/ondaurbanita-code/radio-onda-urbanita/refs/heads/master/lib/lista_audios.json",
+      "https://raw.githubusercontent.com/$repoOwner/$repoName/master/lib/lista_audios.json?t=${DateTime.now().millisecondsSinceEpoch}",
     );
     var respuesta = await http.get(url);
-    if (respuesta.statusCode == 200) return jsonDecode(respuesta.body);
-    return [];
+    if (mounted) {
+      setState(() {
+        if (respuesta.statusCode == 200) {
+          _audiosLocales = jsonDecode(respuesta.body);
+          if (_audiosLocales != null && _audiosLocales!.isNotEmpty) {
+            List<String> cursos = _audiosLocales!
+                .map((a) => (a['curso'] as String?) ?? "24/25")
+                .toList();
+            cursos.sort((a, b) => b.compareTo(a));
+            _cursoMasReciente = cursos.first;
+          }
+        }
+        _cargando = false;
+      });
+    }
   }
 
   Future<void> eliminarPrograma(Map audio) async {
+    bool? confirmar = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text("¿Eliminar programa?"),
+        content: Text(
+          "Esta acción borrará '${audio['titulo']}' de la lista definitiva.",
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: Text("Cancelar"),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: Text("Eliminar", style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmar != true) return;
+
+    setState(
+      () => _audiosLocales?.removeWhere(
+        (item) =>
+            item['titulo'] == audio['titulo'] && item['url'] == audio['url'],
+      ),
+    );
+
     try {
       String pathJson = "lib/lista_audios.json";
       var urlJson = Uri.parse(
         "https://api.github.com/repos/$repoOwner/$repoName/contents/$pathJson",
       );
-
       var resGet = await http.get(
         urlJson,
         headers: {"Authorization": "token $githubToken"},
       );
-      var data = jsonDecode(resGet.body);
-      String shaJson = data['sha'];
-      List content = jsonDecode(
-        utf8.decode(base64.decode(data['content'].replaceAll('\n', ''))),
-      );
-
-      content.removeWhere(
-        (item) =>
-            item['titulo'] == audio['titulo'] && item['url'] == audio['url'],
-      );
-
-      await http.put(
-        urlJson,
-        headers: {"Authorization": "token $githubToken"},
-        body: jsonEncode({
-          "message": "Eliminar programa: ${audio['titulo']}",
-          "content": base64Encode(utf8.encode(jsonEncode(content))),
-          "sha": shaJson,
-        }),
-      );
-
-      String nombreArchivo = audio['url'].split('/').last;
-      var urlAudio = Uri.parse(
-        "https://api.github.com/repos/$repoOwner/$repoName/contents/lib/audios/$nombreArchivo",
-      );
-      var resAudio = await http.get(
-        urlAudio,
-        headers: {"Authorization": "token $githubToken"},
-      );
-
-      if (resAudio.statusCode == 200) {
-        await http.delete(
-          urlAudio,
+      if (resGet.statusCode == 200) {
+        var data = jsonDecode(resGet.body);
+        List content = jsonDecode(
+          utf8.decode(base64.decode(data['content'].replaceAll('\n', ''))),
+        );
+        content.removeWhere(
+          (item) =>
+              item['titulo'] == audio['titulo'] && item['url'] == audio['url'],
+        );
+        await http.put(
+          urlJson,
           headers: {"Authorization": "token $githubToken"},
           body: jsonEncode({
-            "message": "Borrar archivo audio: $nombreArchivo",
-            "sha": jsonDecode(resAudio.body)['sha'],
+            "message": "Eliminar programa: ${audio['titulo']}",
+            "content": base64Encode(utf8.encode(jsonEncode(content))),
+            "sha": data['sha'],
           }),
         );
       }
-
-      if (audio['imagen'] != null && !audio['imagen'].contains('default.png')) {
-        String nombreImg = audio['imagen'].split('/').last;
-        var urlImg = Uri.parse(
-          "https://api.github.com/repos/$repoOwner/$repoName/contents/lib/portadas/$nombreImg",
-        );
-        var resImg = await http.get(
-          urlImg,
-          headers: {"Authorization": "token $githubToken"},
-        );
-
-        if (resImg.statusCode == 200) {
-          await http.delete(
-            urlImg,
-            headers: {"Authorization": "token $githubToken"},
-            body: jsonEncode({
-              "message": "Borrar portada: $nombreImg",
-              "sha": jsonDecode(resImg.body)['sha'],
-            }),
-          );
-        }
-      }
-
-      setState(() {});
     } catch (e) {
-      debugPrint("error al eliminar: $e");
+      _inicializarLista();
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    User? currentUser = FirebaseAuth.instance.currentUser;
-
+    bool tienePermisos = _rol == 'admin' || _rol == 'superadmin';
     return Scaffold(
-      backgroundColor: Colors.grey[100],
+      backgroundColor: Colors.white,
       appBar: AppBar(
         title: Text(
           "Programas",
@@ -146,150 +174,108 @@ class _ListadoScreenState extends State<ListadoScreen> {
         backgroundColor: Colors.white,
         elevation: 0.5,
         iconTheme: IconThemeData(color: Colors.black),
+        actions: [
+          if (tienePermisos)
+            IconButton(
+              icon: Icon(Icons.add_circle_outline, color: Colors.orange),
+              onPressed: () async {
+                await Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (c) => AdminUploadScreen()),
+                );
+                _inicializarLista();
+              },
+            ),
+        ],
       ),
-      body: FutureBuilder<List>(
-        future: _obtenerAudios(),
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return Center(
-              child: CircularProgressIndicator(color: Colors.orange),
-            );
-          }
-          if (snapshot.hasError || !snapshot.hasData) {
-            return Center(child: Text("Error al cargar"));
-          }
+      body: _cargando
+          ? Center(child: CircularProgressIndicator(color: Colors.orange))
+          : _construirLista(tienePermisos),
+    );
+  }
 
-          var audios = snapshot.data!;
-          String cursoHoy = obtenerCursoActual();
-          Map<String, List> grupos = {};
+  Widget _construirLista(bool tienePermisos) {
+    Map<String, List> grupos = {};
+    for (var audio in _audiosLocales!) {
+      String c = audio['curso'] ?? "24/25";
+      if (!grupos.containsKey(c)) grupos[c] = [];
+      grupos[c]!.add(audio);
+    }
+    List<String> nombresCursos = grupos.keys.toList()
+      ..sort((a, b) => b.compareTo(a));
 
-          for (var audio in audios) {
-            String c = audio['curso'] ?? "23/24";
-            if (!grupos.containsKey(c)) grupos[c] = [];
-            grupos[c]!.add(audio);
-          }
+    return ListView.builder(
+      padding: EdgeInsets.all(10),
+      itemCount: nombresCursos.length,
+      itemBuilder: (context, index) {
+        String curso = nombresCursos[index];
+        bool esElMasNuevo = curso == _cursoMasReciente;
 
-          List<String> nombresCursos = grupos.keys.toList()
-            ..sort((a, b) => b.compareTo(a));
-
-          return ListView.builder(
-            padding: EdgeInsets.all(15),
-            itemCount: nombresCursos.length,
-            itemBuilder: (context, index) {
-              String cursoNombre = nombresCursos[index];
-              List audiosDelCurso = grupos[cursoNombre]!;
-
-              return ExpansionTile(
-                title: Text(
-                  "Curso $cursoNombre",
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    color: Colors.orange[900],
-                  ),
+        return Card(
+          elevation: 0,
+          margin: EdgeInsets.only(bottom: 10),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(15),
+            side: BorderSide(color: Colors.grey[200]!),
+          ),
+          child: ExpansionTile(
+            initiallyExpanded: esElMasNuevo,
+            iconColor: Colors.orange,
+            textColor: Colors.orange[800],
+            title: Text(
+              "Curso $curso",
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+            ),
+            children: grupos[curso]!.map((audio) {
+              bool escuchado = _escuchados.contains(audio['url'].toString());
+              return ListTile(
+                contentPadding: EdgeInsets.symmetric(
+                  horizontal: 20,
+                  vertical: 5,
                 ),
-                initiallyExpanded: cursoNombre == cursoHoy,
-                children: audiosDelCurso.map((audio) {
-                  String titulo = audio['titulo'];
-                  return Container(
-                    margin: EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(15),
-                    ),
-                    child: ListTile(
-                      leading: CircleAvatar(
-                        backgroundColor: Colors.orange[50],
-                        child: Icon(Icons.play_arrow, color: Colors.orange),
+                leading: escuchado
+                    ? Icon(Icons.check_circle, color: Colors.green)
+                    : Icon(Icons.radio, color: Colors.grey[400]),
+                title: Text(
+                  audio['titulo'],
+                  style: TextStyle(fontWeight: FontWeight.w500),
+                ),
+                subtitle: Text(
+                  audio['descripcion'] != null &&
+                          audio['descripcion'].toString().isNotEmpty
+                      ? audio['descripcion']
+                      : (audio['categoria'] ?? "Radio"),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                ),
+                trailing: tienePermisos
+                    ? IconButton(
+                        icon: Icon(Icons.delete, color: Colors.red[300]),
+                        onPressed: () => eliminarPrograma(audio),
+                      )
+                    : Icon(
+                        Icons.arrow_forward_ios,
+                        size: 14,
+                        color: Colors.grey,
                       ),
-                      title: Text(
-                        titulo,
-                        style: TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
-                        ),
+                onTap: () async {
+                  await Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (c) => PlayerScreen(
+                        listaAudios: grupos[curso]!,
+                        indiceInicial: grupos[curso]!.indexOf(audio),
                       ),
-                      trailing: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            FontAwesomeIcons.youtube,
-                            color: Colors.red,
-                            size: 14,
-                          ),
-                          SizedBox(width: 10),
-                          FutureBuilder<bool>(
-                            future: _estaTerminado(titulo),
-                            builder: (context, res) {
-                              if (res.data == true) {
-                                return Image.asset(
-                                  'assets/logo.png',
-                                  height: 25,
-                                );
-                              }
-                              return Icon(
-                                Icons.cancel,
-                                size: 12,
-                                color: Colors.grey,
-                              );
-                            },
-                          ),
-                          if (currentUser?.email == "ondaurbanita@gmail.com")
-                            IconButton(
-                              icon: Icon(
-                                Icons.delete_outline,
-                                color: Colors.red,
-                                size: 20,
-                              ),
-                              onPressed: () {
-                                showDialog(
-                                  context: context,
-                                  builder: (context) => AlertDialog(
-                                    title: Text("¿Eliminar?"),
-                                    content: Text(
-                                      "Se borrarán los archivos de GitHub.",
-                                    ),
-                                    actions: [
-                                      TextButton(
-                                        onPressed: () => Navigator.pop(context),
-                                        child: Text("No"),
-                                      ),
-                                      TextButton(
-                                        onPressed: () {
-                                          Navigator.pop(context);
-                                          eliminarPrograma(audio);
-                                        },
-                                        child: Text(
-                                          "Sí",
-                                          style: TextStyle(color: Colors.red),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                );
-                              },
-                            ),
-                        ],
-                      ),
-                      onTap: () async {
-                        await Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => PlayerScreen(
-                              listaAudios: audiosDelCurso,
-                              indiceInicial: audiosDelCurso.indexOf(audio),
-                            ),
-                          ),
-                        );
-                        setState(() {});
-                      },
                     ),
                   );
-                }).toList(),
+                  _cargarEscuchadosFirebase();
+                },
               );
-            },
-          );
-        },
-      ),
+            }).toList(),
+          ),
+        );
+      },
     );
   }
 }
