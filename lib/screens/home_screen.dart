@@ -30,8 +30,25 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> _configurarNotificaciones() async {
     FirebaseMessaging messaging = FirebaseMessaging.instance;
-    await messaging.requestPermission();
-    await messaging.subscribeToTopic("anuncios_radio");
+
+    // 1. Pedir permiso explícito (Android 13+ lo necesita sí o sí)
+    NotificationSettings settings = await messaging.requestPermission(
+      alert: true,
+      badge: true,
+      sound: true,
+    );
+
+    if (settings.authorizationStatus == AuthorizationStatus.authorized) {
+      // 2. SACAR EL TOKEN (Esto es lo que te falta para la captura que mandaste)
+      String? token = await messaging.getToken();
+      print("ESTE ES TU TOKEN: $token"); // Cópialo de la consola de VS Code
+
+      // 3. Suscribirse
+      await messaging.subscribeToTopic("anuncios_radio");
+      print("Suscrito a anuncios_radio con éxito");
+    } else {
+      print("El usuario rechazó los permisos de notificación");
+    }
   }
 
   Future<void> _inicializarApp() async {

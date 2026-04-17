@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:just_audio/just_audio.dart';
+import 'package:just_audio_background/just_audio_background.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
@@ -47,18 +48,80 @@ class _PlayerScreenState extends State<PlayerScreen> {
       }
     });
 
+    _player.currentIndexStream.listen((index) {
+      if (index != null && mounted) {
+        setState(() => _indiceActual = index);
+      }
+    });
+
     _prepararAudio();
+  }
+
+  Future<void> _prepararAudio() async {
+    _progresoCargado = false;
+
+    final playlist = ConcatenatingAudioSource(
+      useLazyPreparation: true,
+      children: widget.listaAudios.map((audio) {
+        return AudioSource.uri(
+          Uri.parse(audio['url']),
+          tag: MediaItem(
+            id: audio['url'],
+            album: "Onda Urbanita",
+            title: audio['titulo'],
+            artist: audio['colaboradores'] ?? "Radio",
+            artUri: Uri.parse(audio['imagen']),
+            playable: true,
+          ),
+        );
+      }).toList(),
+    );
+
+    try {
+      await _player.setAudioSource(playlist, initialIndex: _indiceActual);
+
+      final user = FirebaseAuth.instance.currentUser;
+      if (user != null) {
+        final audio = widget.listaAudios[_indiceActual];
+        final tituloDoc = audio['titulo'].toString().replaceAll(' ', '_');
+        var doc = await FirebaseFirestore.instance
+            .collection('usuarios')
+            .doc(user.uid)
+            .collection('progreso')
+            .doc(tituloDoc)
+            .get();
+
+        if (doc.exists && doc.data()?['segundos_actuales'] != null) {
+          int seg = doc.data()!['segundos_actuales'];
+          await _player.seek(Duration(seconds: seg));
+        }
+      }
+
+      _progresoCargado = true;
+      _player.play();
+    } catch (e) {
+      print(e);
+    }
+  }
+
+  void _botonAnterior() {
+    if (_player.position.inSeconds <= 3) {
+      if (_player.hasPrevious) {
+        _player.seekToPrevious();
+      } else {
+        _player.seek(Duration.zero);
+      }
+    } else {
+      _player.seek(Duration.zero);
+    }
   }
 
   Future<void> _guardarProgresoActual(Duration p) async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null || _total == Duration.zero) return;
-
     final audio = widget.listaAudios[_indiceActual];
-    final String tituloDoc = audio['titulo'].toString().replaceAll(' ', '_');
-
+    final tituloDoc = audio['titulo'].toString().replaceAll(' ', '_');
     bool terminado = (_total.inSeconds - p.inSeconds) <= 3;
-
     try {
       await FirebaseFirestore.instance
           .collection('usuarios')
@@ -78,10 +141,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
   Future<void> _registrarProgresoTerminado(bool terminado) async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
-
     final audio = widget.listaAudios[_indiceActual];
-    final String tituloDoc = audio['titulo'].toString().replaceAll(' ', '_');
-
+    final tituloDoc = audio['titulo'].toString().replaceAll(' ', '_');
     try {
       await FirebaseFirestore.instance
           .collection('usuarios')
@@ -92,39 +153,6 @@ class _PlayerScreenState extends State<PlayerScreen> {
             'terminado': terminado,
             'fecha': FieldValue.serverTimestamp(),
           }, SetOptions(merge: true));
-    } catch (e) {
-      print(e);
-    }
-  }
-
-  Future<void> _prepararAudio() async {
-    final audio = widget.listaAudios[_indiceActual];
-    _progresoCargado = false;
-
-    try {
-      await _player.setUrl(audio['url']);
-
-      final user = FirebaseAuth.instance.currentUser;
-      if (user != null) {
-        final String tituloDoc = audio['titulo'].toString().replaceAll(
-          ' ',
-          '_',
-        );
-        var doc = await FirebaseFirestore.instance
-            .collection('usuarios')
-            .doc(user.uid)
-            .collection('progreso')
-            .doc(tituloDoc)
-            .get();
-
-        if (doc.exists && doc.data()?['segundos_actuales'] != null) {
-          int seg = doc.data()!['segundos_actuales'];
-          await _player.seek(Duration(seconds: seg));
-        }
-      }
-
-      _progresoCargado = true;
-      _player.play();
     } catch (e) {
       print(e);
     }
@@ -235,44 +263,37 @@ class _PlayerScreenState extends State<PlayerScreen> {
               children: [
                 IconButton(
                   icon: Icon(Icons.skip_previous_rounded, size: 45),
-                  onPressed: _indiceActual > 0
-                      ? () {
-                          setState(() {
-                            _indiceActual--;
-                            _prepararAudio();
-                          });
-                        }
-                      : null,
+                  onPressed: () => _botonAnterior(),
                 ),
                 GestureDetector(
-                  onTap: () => setState(
-                    () => _player.playing ? _player.pause() : _player.play(),
-                  ),
-                  child: Container(
-                    height: 80,
-                    width: 80,
-                    decoration: BoxDecoration(
-                      color: Colors.orange[800],
-                      shape: BoxShape.circle,
-                    ),
-                    child: Icon(
-                      _player.playing
-                          ? Icons.pause_rounded
-                          : Icons.play_arrow_rounded,
-                      size: 50,
-                      color: Colors.white,
-                    ),
+                  onTap: () =>
+                      _player.playing ? _player.pause() : _player.play(),
+                  child: StreamBuilder<PlayerState>(
+                    stream: _player.playerStateStream,
+                    builder: (context, snapshot) {
+                      final playing = snapshot.data?.playing ?? false;
+                      return Container(
+                        height: 80,
+                        width: 80,
+                        decoration: BoxDecoration(
+                          color: Colors.orange[800],
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(
+                          playing
+                              ? Icons.pause_rounded
+                              : Icons.play_arrow_rounded,
+                          size: 50,
+                          color: Colors.white,
+                        ),
+                      );
+                    },
                   ),
                 ),
                 IconButton(
                   icon: Icon(Icons.skip_next_rounded, size: 45),
-                  onPressed: _indiceActual < widget.listaAudios.length - 1
-                      ? () {
-                          setState(() {
-                            _indiceActual++;
-                            _prepararAudio();
-                          });
-                        }
+                  onPressed: _player.hasNext
+                      ? () => _player.seekToNext()
                       : null,
                 ),
               ],

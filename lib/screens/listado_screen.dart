@@ -3,6 +3,8 @@ import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:url_launcher/url_launcher.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import '../config/secrets.dart';
 import 'player_screen.dart';
 import 'admin_upload_screen.dart';
@@ -86,8 +88,11 @@ class _ListadoScreenState extends State<ListadoScreen> {
         if (respuesta.statusCode == 200) {
           _audiosLocales = jsonDecode(respuesta.body);
           if (_audiosLocales != null && _audiosLocales!.isNotEmpty) {
+            String aa = DateTime.now().year.toString().substring(2);
+            String as = (DateTime.now().year + 1).toString().substring(2);
+
             List<String> cursos = _audiosLocales!
-                .map((a) => (a['curso'] as String?) ?? "24/25")
+                .map((a) => (a['curso'] as String?) ?? "$aa/$as")
                 .toList();
             cursos.sort((a, b) => b.compareTo(a));
             _cursoMasReciente = cursos.first;
@@ -167,6 +172,7 @@ class _ListadoScreenState extends State<ListadoScreen> {
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
+        centerTitle: true,
         title: Text(
           "Programas",
           style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold),
@@ -195,9 +201,13 @@ class _ListadoScreenState extends State<ListadoScreen> {
   }
 
   Widget _construirLista(bool tienePermisos) {
+    String aa = DateTime.now().year.toString().substring(2);
+    String as = (DateTime.now().year + 1).toString().substring(2);
+    String cursoAutomatico = "$aa/$as";
+
     Map<String, List> grupos = {};
     for (var audio in _audiosLocales!) {
-      String c = audio['curso'] ?? "24/25";
+      String c = audio['curso'] ?? cursoAutomatico;
       if (!grupos.containsKey(c)) grupos[c] = [];
       grupos[c]!.add(audio);
     }
@@ -228,6 +238,8 @@ class _ListadoScreenState extends State<ListadoScreen> {
             ),
             children: grupos[curso]!.map((audio) {
               bool escuchado = _escuchados.contains(audio['url'].toString());
+              String? youtubeUrl = audio['youtube'];
+
               return ListTile(
                 contentPadding: EdgeInsets.symmetric(
                   horizontal: 20,
@@ -249,16 +261,39 @@ class _ListadoScreenState extends State<ListadoScreen> {
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(fontSize: 12, color: Colors.grey[600]),
                 ),
-                trailing: tienePermisos
-                    ? IconButton(
+                trailing: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (youtubeUrl != null && youtubeUrl.isNotEmpty)
+                      IconButton(
+                        icon: FaIcon(
+                          FontAwesomeIcons.youtube,
+                          color: Color(0xFFFF0000),
+                          size: 22,
+                        ),
+                        onPressed: () async {
+                          final uri = Uri.parse(youtubeUrl);
+                          if (await canLaunchUrl(uri)) {
+                            await launchUrl(
+                              uri,
+                              mode: LaunchMode.externalApplication,
+                            );
+                          }
+                        },
+                      ),
+                    if (tienePermisos)
+                      IconButton(
                         icon: Icon(Icons.delete, color: Colors.red[300]),
                         onPressed: () => eliminarPrograma(audio),
                       )
-                    : Icon(
+                    else if (youtubeUrl == null || youtubeUrl.isEmpty)
+                      Icon(
                         Icons.arrow_forward_ios,
                         size: 14,
                         color: Colors.grey,
                       ),
+                  ],
+                ),
                 onTap: () async {
                   await Navigator.push(
                     context,
