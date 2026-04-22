@@ -3,6 +3,7 @@ import 'package:file_picker/file_picker.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:googleapis_auth/auth_io.dart' as auth;
+import '../config/curso_input_formatter.dart';
 import '../config/secrets.dart';
 
 class AdminUploadScreen extends StatefulWidget {
@@ -291,7 +292,11 @@ class _AdminUploadScreenState extends State<AdminUploadScreen> {
           ),
           TextField(
             controller: cursoCtrl,
-            decoration: InputDecoration(labelText: "Curso (Formato 25/26)"),
+            keyboardType: TextInputType.number,
+            inputFormatters: [CursoInputFormatter()],
+            decoration: InputDecoration(
+              labelText: "Curso (Formato 25/26)",
+            ),
           ),
           TextField(
             controller: youtubeCtrl,

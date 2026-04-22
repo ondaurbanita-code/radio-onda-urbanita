@@ -8,7 +8,7 @@ class PlayerScreen extends StatefulWidget {
   final List listaAudios;
   final int indiceInicial;
 
-  const PlayerScreen({
+  PlayerScreen({
     super.key,
     required this.listaAudios,
     required this.indiceInicial,
@@ -23,7 +23,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
   late int _indiceActual;
   Duration _posicion = Duration.zero;
   Duration _total = Duration.zero;
-  bool _progresoCargado = false;
+  bool _cargando = true;
 
   @override
   void initState() {
@@ -48,17 +48,21 @@ class _PlayerScreenState extends State<PlayerScreen> {
       }
     });
 
-    _player.currentIndexStream.listen((index) {
-      if (index != null && mounted) {
-        setState(() => _indiceActual = index);
+    _player.sequenceStateStream.listen((sequenceState) {
+      if (sequenceState == null) return;
+      final index = sequenceState.currentIndex;
+      if (mounted && index != _indiceActual) {
+        setState(() {
+          _indiceActual = index;
+        });
       }
     });
 
-    _prepararAudio();
+    _prepararPlaylist();
   }
 
-  Future<void> _prepararAudio() async {
-    _progresoCargado = false;
+  Future<void> _prepararPlaylist() async {
+    setState(() => _cargando = true);
 
     final playlist = ConcatenatingAudioSource(
       useLazyPreparation: true,
@@ -71,7 +75,6 @@ class _PlayerScreenState extends State<PlayerScreen> {
             title: audio['titulo'],
             artist: audio['colaboradores'] ?? "Radio",
             artUri: Uri.parse(audio['imagen']),
-            playable: true,
           ),
         );
       }).toList(),
@@ -79,6 +82,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
     try {
       await _player.setAudioSource(playlist, initialIndex: _indiceActual);
+      await _player.setLoopMode(LoopMode.off);
 
       final user = FirebaseAuth.instance.currentUser;
       if (user != null) {
@@ -93,32 +97,36 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
         if (doc.exists && doc.data()?['segundos_actuales'] != null) {
           int seg = doc.data()!['segundos_actuales'];
-          await _player.seek(Duration(seconds: seg));
+          await _player.seek(Duration(seconds: seg), index: _indiceActual);
         }
       }
 
-      _progresoCargado = true;
-      _player.play();
+      if (mounted) {
+        setState(() => _cargando = false);
+        _player.play();
+      }
     } catch (e) {
-      print(e);
+      if (mounted) setState(() => _cargando = false);
     }
   }
 
-  void _botonAnterior() {
-    if (_player.position.inSeconds <= 3) {
-      if (_player.hasPrevious) {
-        _player.seekToPrevious();
-      } else {
-        _player.seek(Duration.zero);
-      }
-    } else {
+  void _irASiguiente() {
+    if (_player.hasNext) {
+      _player.seekToNext();
+    }
+  }
+
+  void _irAAnterior() {
+    if (_player.position.inSeconds >= 2) {
       _player.seek(Duration.zero);
+    } else if (_player.hasPrevious) {
+      _player.seekToPrevious();
     }
   }
 
   Future<void> _guardarProgresoActual(Duration p) async {
     final user = FirebaseAuth.instance.currentUser;
-    if (user == null || _total == Duration.zero) return;
+    if (user == null || _total == Duration.zero || _cargando) return;
     final audio = widget.listaAudios[_indiceActual];
     final tituloDoc = audio['titulo'].toString().replaceAll(' ', '_');
     bool terminado = (_total.inSeconds - p.inSeconds) <= 3;
@@ -134,15 +142,15 @@ class _PlayerScreenState extends State<PlayerScreen> {
             'ultimo_acceso': FieldValue.serverTimestamp(),
           }, SetOptions(merge: true));
     } catch (e) {
-      print(e);
+      debugPrint(e.toString());
     }
   }
 
   Future<void> _registrarProgresoTerminado(bool terminado) async {
     final user = FirebaseAuth.instance.currentUser;
-    if (user == null) return;
+    if (user == null || _cargando) return;
     final audio = widget.listaAudios[_indiceActual];
-    final tituloDoc = audio['titulo'].toString().replaceAll(' ', '_');
+    final String tituloDoc = audio['titulo'].toString().replaceAll(' ', '_');
     try {
       await FirebaseFirestore.instance
           .collection('usuarios')
@@ -154,7 +162,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
             'fecha': FieldValue.serverTimestamp(),
           }, SetOptions(merge: true));
     } catch (e) {
-      print(e);
+      debugPrint(e.toString());
     }
   }
 
@@ -173,6 +181,15 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   @override
   Widget build(BuildContext context) {
+    if (_cargando) {
+      return Scaffold(
+        backgroundColor: Colors.grey[50],
+        body: Center(
+          child: CircularProgressIndicator(color: Colors.orange[800]),
+        ),
+      );
+    }
+
     final audio = widget.listaAudios[_indiceActual];
 
     return Scaffold(
@@ -210,6 +227,12 @@ class _PlayerScreenState extends State<PlayerScreen> {
                   width: 300,
                   height: 300,
                   fit: BoxFit.cover,
+                  errorBuilder: (context, error, stackTrace) => Container(
+                    width: 300,
+                    height: 300,
+                    color: Colors.grey[300],
+                    child: Icon(Icons.music_note, size: 100),
+                  ),
                 ),
               ),
             ),
@@ -263,15 +286,21 @@ class _PlayerScreenState extends State<PlayerScreen> {
               children: [
                 IconButton(
                   icon: Icon(Icons.skip_previous_rounded, size: 45),
-                  onPressed: () => _botonAnterior(),
+                  onPressed:
+                      _player.hasPrevious || _player.position.inSeconds >= 2
+                      ? () => _irAAnterior()
+                      : null,
                 ),
                 GestureDetector(
-                  onTap: () =>
-                      _player.playing ? _player.pause() : _player.play(),
+                  onTap: () {
+                    _player.playing ? _player.pause() : _player.play();
+                  },
                   child: StreamBuilder<PlayerState>(
                     stream: _player.playerStateStream,
                     builder: (context, snapshot) {
-                      final playing = snapshot.data?.playing ?? false;
+                      final playerState = snapshot.data;
+                      final playing = playerState?.playing ?? false;
+
                       return Container(
                         height: 80,
                         width: 80,
@@ -292,9 +321,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
                 ),
                 IconButton(
                   icon: Icon(Icons.skip_next_rounded, size: 45),
-                  onPressed: _player.hasNext
-                      ? () => _player.seekToNext()
-                      : null,
+                  onPressed: _player.hasNext ? () => _irASiguiente() : null,
                 ),
               ],
             ),
