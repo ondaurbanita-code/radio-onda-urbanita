@@ -7,6 +7,10 @@ import '../config/curso_input_formatter.dart';
 import '../config/secrets.dart';
 
 class AdminUploadScreen extends StatefulWidget {
+  final Map? programaAEditar;
+
+  AdminUploadScreen({this.programaAEditar});
+
   @override
   State<AdminUploadScreen> createState() => _AdminUploadScreenState();
 }
@@ -32,8 +36,14 @@ class _AdminUploadScreenState extends State<AdminUploadScreen> {
   @override
   void initState() {
     super.initState();
-    String aa = DateTime.now().year.toString().substring(2);
-    String as = (DateTime.now().year + 1).toString().substring(2);
+    if (widget.programaAEditar != null) {
+      tituloCtrl.text = widget.programaAEditar!['titulo'] ?? "";
+      categoriaCtrl.text = widget.programaAEditar!['categoria'] ?? "";
+      colabCtrl.text = widget.programaAEditar!['colaboradores'] ?? "";
+      cursoCtrl.text = widget.programaAEditar!['curso'] ?? "";
+      youtubeCtrl.text = widget.programaAEditar!['youtube'] ?? "";
+      descCtrl.text = widget.programaAEditar!['descripcion'] ?? "";
+    }
   }
 
   Future<void> seleccionarAudio() async {
@@ -69,15 +79,9 @@ class _AdminUploadScreenState extends State<AdminUploadScreen> {
         jsonString,
       );
       final scopes = ['https://www.googleapis.com/auth/firebase.messaging'];
-
       final client = await auth.clientViaServiceAccount(
         accountCredentials,
         scopes,
-      );
-
-      final String proyectoId = "ondaurbanita-radio";
-      final url = Uri.parse(
-        'https://fcm.googleapis.com/v1/projects/$proyectoId/messages:send',
       );
 
       final body = {
@@ -91,54 +95,46 @@ class _AdminUploadScreenState extends State<AdminUploadScreen> {
             'priority': 'high',
             'notification': {
               'sound': 'default',
-              'click_action': 'FLUTTER_NOTIFICATION_CLICK',
               'channel_id': 'radio_notifications',
             },
           },
-          'data': {'type': 'nuevo_audio'},
         },
       };
 
       await client.post(
-        url,
+        Uri.parse(
+          'https://fcm.googleapis.com/v1/projects/ondaurbanita-radio/messages:send',
+        ),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode(body),
       );
-
       client.close();
     } catch (e) {
-      print("error enviando notificacion v1: $e");
+      print(e);
     }
   }
 
   Future<void> subirAGithub() async {
-    if (archivoAudio == null ||
-        tituloCtrl.text.isEmpty ||
-        cursoCtrl.text.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Rellena los campos obligatorios")),
-      );
-      return;
-    }
+    if (widget.programaAEditar == null && archivoAudio == null) return;
+    if (tituloCtrl.text.isEmpty || cursoCtrl.text.isEmpty) return;
 
     setState(() => subiendo = true);
-
     try {
       String nombreLimpio = tituloCtrl.text.trim().replaceAll(' ', '_');
+      actualizarProgreso(0.2, "Procesando archivos...");
 
-      actualizarProgreso(0.1, "Preparando archivos...");
-
-      actualizarProgreso(0.3, "Subiendo audio a la nube...");
-      await enviarArchivoGithub(
-        "lib/audios/$nombreLimpio.mp3",
-        archivoAudio!.bytes!,
-      );
+      if (archivoAudio != null) {
+        await enviarArchivoGithub(
+          "lib/audios/$nombreLimpio.mp3",
+          archivoAudio!.bytes!,
+        );
+      }
 
       String urlPortada =
+          widget.programaAEditar?['imagen'] ??
           "https://raw.githubusercontent.com/$repoOwner/$repoName/master/lib/portadas/logo.png";
 
       if (archivoPortada != null) {
-        actualizarProgreso(0.6, "Subiendo imagen de portada...");
         String ext = archivoPortada!.extension ?? "jpg";
         await enviarArchivoGithub(
           "lib/portadas/$nombreLimpio.$ext",
@@ -148,20 +144,33 @@ class _AdminUploadScreenState extends State<AdminUploadScreen> {
             "https://raw.githubusercontent.com/$repoOwner/$repoName/master/lib/portadas/$nombreLimpio.$ext";
       }
 
-      actualizarProgreso(0.8, "Actualizando listado general...");
-      await actualizarJsonGithub(urlPortada, nombreLimpio);
+      actualizarProgreso(0.7, "Actualizando base de datos...");
 
-      actualizarProgreso(0.9, "Notificando a los oyentes...");
-      await enviarNotificacion(tituloCtrl.text.trim());
+      Map itemActualizado = {
+        "titulo": tituloCtrl.text.trim(),
+        "categoria": categoriaCtrl.text.trim(),
+        "colaboradores": colabCtrl.text.trim(),
+        "curso": cursoCtrl.text.trim(),
+        "youtube": youtubeCtrl.text.trim(),
+        "descripcion": descCtrl.text.trim(),
+        "imagen": urlPortada,
+        "url":
+            widget.programaAEditar?['url'] ??
+            "https://raw.githubusercontent.com/$repoOwner/$repoName/master/lib/audios/$nombreLimpio.mp3",
+      };
 
-      actualizarProgreso(1.0, "¡Publicado con éxito!");
+      await actualizarJsonGithub(itemActualizado);
+
+      if (widget.programaAEditar == null) {
+        await enviarNotificacion(tituloCtrl.text.trim());
+      }
+
+      actualizarProgreso(1.0, "¡Listo!");
       await Future.delayed(Duration(seconds: 1));
 
-      Navigator.pop(context, true);
+      Navigator.pop(context, itemActualizado);
     } catch (e) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text("Error: $e")));
+      print(e);
     } finally {
       if (mounted) setState(() => subiendo = false);
     }
@@ -172,11 +181,11 @@ class _AdminUploadScreenState extends State<AdminUploadScreen> {
       "https://api.github.com/repos/$repoOwner/$repoName/contents/$path",
     );
     String? sha;
-    var getRes = await http.get(
+    var res = await http.get(
       url,
       headers: {"Authorization": "token $githubToken"},
     );
-    if (getRes.statusCode == 200) sha = jsonDecode(getRes.body)['sha'];
+    if (res.statusCode == 200) sha = jsonDecode(res.body)['sha'];
 
     await http.put(
       url,
@@ -192,10 +201,9 @@ class _AdminUploadScreenState extends State<AdminUploadScreen> {
     );
   }
 
-  Future<void> actualizarJsonGithub(String urlP, String nLimpio) async {
-    String path = "lib/lista_audios.json";
+  Future<void> actualizarJsonGithub(Map item) async {
     var url = Uri.parse(
-      "https://api.github.com/repos/$repoOwner/$repoName/contents/$path",
+      "https://api.github.com/repos/$repoOwner/$repoName/contents/lib/lista_audios.json",
     );
     var res = await http.get(
       url,
@@ -206,17 +214,14 @@ class _AdminUploadScreenState extends State<AdminUploadScreen> {
       utf8.decode(base64.decode(data['content'].replaceAll('\n', ''))),
     );
 
-    content.add({
-      "titulo": tituloCtrl.text.trim(),
-      "categoria": categoriaCtrl.text.trim(),
-      "colaboradores": colabCtrl.text.trim(),
-      "curso": cursoCtrl.text.trim(),
-      "youtube": youtubeCtrl.text.trim(),
-      "descripcion": descCtrl.text.trim(),
-      "imagen": urlP,
-      "url":
-          "https://raw.githubusercontent.com/$repoOwner/$repoName/master/lib/audios/$nLimpio.mp3",
-    });
+    if (widget.programaAEditar != null) {
+      int idx = content.indexWhere(
+        (e) => e['url'] == widget.programaAEditar!['url'],
+      );
+      if (idx != -1) content[idx] = item;
+    } else {
+      content.add(item);
+    }
 
     await http.put(
       url,
@@ -234,7 +239,9 @@ class _AdminUploadScreenState extends State<AdminUploadScreen> {
     return Scaffold(
       appBar: AppBar(
         centerTitle: true,
-        title: Text("Nuevo Programa"),
+        title: Text(
+          widget.programaAEditar == null ? "Nuevo Programa" : "Editar Programa",
+        ),
         backgroundColor: Colors.orange,
       ),
       body: subiendo ? _buildProgreso() : _buildFormulario(),
@@ -243,32 +250,16 @@ class _AdminUploadScreenState extends State<AdminUploadScreen> {
 
   Widget _buildProgreso() {
     return Center(
-      child: Padding(
-        padding: EdgeInsets.symmetric(horizontal: 40),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            CircularProgressIndicator(
-              value: valorProgreso,
-              color: Colors.orange,
-            ),
-            SizedBox(height: 30),
-            Text(
-              mensajeEstado,
-              textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-            ),
-            SizedBox(height: 10),
-            Text(
-              "${(valorProgreso * 100).toInt()}%",
-              style: TextStyle(
-                fontSize: 24,
-                color: Colors.orange,
-                fontWeight: FontWeight.w900,
-              ),
-            ),
-          ],
-        ),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          CircularProgressIndicator(value: valorProgreso, color: Colors.orange),
+          SizedBox(height: 20),
+          Text(
+            mensajeEstado,
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+          ),
+        ],
       ),
     );
   }
@@ -284,7 +275,7 @@ class _AdminUploadScreenState extends State<AdminUploadScreen> {
           ),
           TextField(
             controller: colabCtrl,
-            decoration: InputDecoration(labelText: "Colaboradores (opcional)"),
+            decoration: InputDecoration(labelText: "Colaboradores"),
           ),
           TextField(
             controller: categoriaCtrl,
@@ -294,37 +285,32 @@ class _AdminUploadScreenState extends State<AdminUploadScreen> {
             controller: cursoCtrl,
             keyboardType: TextInputType.number,
             inputFormatters: [CursoInputFormatter()],
-            decoration: InputDecoration(
-              labelText: "Curso (Formato 25/26)",
-            ),
+            decoration: InputDecoration(labelText: "Curso (25/26)"),
           ),
           TextField(
             controller: youtubeCtrl,
-            decoration: InputDecoration(labelText: "Link YouTube (Opcional)"),
+            decoration: InputDecoration(labelText: "Link YouTube"),
           ),
           TextField(
             controller: descCtrl,
             maxLines: 2,
-            decoration: InputDecoration(
-              labelText: "Descripción corta (Opcional)",
-            ),
+            decoration: InputDecoration(labelText: "Descripción"),
           ),
           SizedBox(height: 20),
-          Card(
-            child: ListTile(
-              leading: Icon(Icons.audio_file, color: Colors.orange),
-              title: Text(archivoAudio?.name ?? "Seleccionar Audio MP3"),
-              onTap: seleccionarAudio,
+          ListTile(
+            leading: Icon(Icons.audio_file, color: Colors.orange),
+            title: Text(
+              archivoAudio?.name ??
+                  (widget.programaAEditar != null
+                      ? "Audio ya subido"
+                      : "Seleccionar MP3"),
             ),
+            onTap: seleccionarAudio,
           ),
-          Card(
-            child: ListTile(
-              leading: Icon(Icons.image, color: Colors.blue),
-              title: Text(
-                archivoPortada?.name ?? "Seleccionar Portada (Opcional)",
-              ),
-              onTap: seleccionarPortada,
-            ),
+          ListTile(
+            leading: Icon(Icons.image, color: Colors.blue),
+            title: Text(archivoPortada?.name ?? "Cambiar Portada (Opcional)"),
+            onTap: seleccionarPortada,
           ),
           SizedBox(height: 30),
           SizedBox(
@@ -334,8 +320,7 @@ class _AdminUploadScreenState extends State<AdminUploadScreen> {
               onPressed: subirAGithub,
               style: ElevatedButton.styleFrom(backgroundColor: Colors.orange),
               child: Text(
-                "PUBLICAR PROGRAMA",
-                style: TextStyle(fontWeight: FontWeight.bold),
+                widget.programaAEditar == null ? "PUBLICAR" : "GUARDAR CAMBIOS",
               ),
             ),
           ),
