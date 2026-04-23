@@ -127,9 +127,11 @@ class _PlayerScreenState extends State<PlayerScreen> {
   Future<void> _guardarProgresoActual(Duration p) async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null || _total == Duration.zero || _cargando) return;
+
     final audio = widget.listaAudios[_indiceActual];
     final tituloDoc = audio['titulo'].toString().replaceAll(' ', '_');
     bool terminado = (_total.inSeconds - p.inSeconds) <= 3;
+
     try {
       await FirebaseFirestore.instance
           .collection('usuarios')
@@ -137,6 +139,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
           .collection('progreso')
           .doc(tituloDoc)
           .set({
+            'titulo': audio['titulo'],
+            'url_id': audio['url'],
             'segundos_actuales': p.inSeconds,
             'terminado': terminado,
             'ultimo_acceso': FieldValue.serverTimestamp(),
@@ -149,8 +153,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
   Future<void> _registrarProgresoTerminado(bool terminado) async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null || _cargando) return;
+
     final audio = widget.listaAudios[_indiceActual];
     final String tituloDoc = audio['titulo'].toString().replaceAll(' ', '_');
+
     try {
       await FirebaseFirestore.instance
           .collection('usuarios')
@@ -158,6 +164,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
           .collection('progreso')
           .doc(tituloDoc)
           .set({
+            'titulo': audio['titulo'],
+            'url_id': audio['url'],
             'terminado': terminado,
             'fecha': FieldValue.serverTimestamp(),
           }, SetOptions(merge: true));
@@ -292,14 +300,31 @@ class _PlayerScreenState extends State<PlayerScreen> {
                       : null,
                 ),
                 GestureDetector(
-                  onTap: () {
-                    _player.playing ? _player.pause() : _player.play();
+                  onTap: () async {
+                    final processingState = _player.processingState;
+
+                    if (processingState == ProcessingState.completed) {
+                      await _player.stop();
+                      await _player.seek(Duration.zero, index: _indiceActual);
+                      _player.play();
+                    } else {
+                      if (_player.playing) {
+                        await _player.pause();
+                      } else {
+                        _player.play();
+                      }
+                    }
                   },
                   child: StreamBuilder<PlayerState>(
                     stream: _player.playerStateStream,
                     builder: (context, snapshot) {
                       final playerState = snapshot.data;
                       final playing = playerState?.playing ?? false;
+                      final processingState = playerState?.processingState;
+
+                      bool mostrarPlay =
+                          !playing ||
+                          processingState == ProcessingState.completed;
 
                       return Container(
                         height: 80,
@@ -309,9 +334,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
                           shape: BoxShape.circle,
                         ),
                         child: Icon(
-                          playing
-                              ? Icons.pause_rounded
-                              : Icons.play_arrow_rounded,
+                          mostrarPlay
+                              ? Icons.play_arrow_rounded
+                              : Icons.pause_rounded,
                           size: 50,
                           color: Colors.white,
                         ),

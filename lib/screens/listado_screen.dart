@@ -10,6 +10,8 @@ import 'player_screen.dart';
 import 'admin_upload_screen.dart';
 
 class ListadoScreen extends StatefulWidget {
+  const ListadoScreen({super.key});
+
   @override
   State<ListadoScreen> createState() => _ListadoScreenState();
 }
@@ -32,8 +34,8 @@ class _ListadoScreenState extends State<ListadoScreen> {
   }
 
   Future<void> _cargarDatos() async {
-    _cargarRol();
-    _cargarEscuchadosFirebase();
+    await _cargarRol();
+    await _cargarEscuchadosFirebase();
     await _inicializarLista();
   }
 
@@ -50,18 +52,24 @@ class _ListadoScreenState extends State<ListadoScreen> {
   Future<void> _cargarEscuchadosFirebase() async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
+
     var snap = await FirebaseFirestore.instance
         .collection('usuarios')
         .doc(user.uid)
         .collection('progreso')
         .where('terminado', isEqualTo: true)
         .get();
+
     if (mounted) {
-      setState(
-        () => _escuchados = snap.docs
-            .map((doc) => doc.data()['url_id'].toString())
-            .toList(),
-      );
+      setState(() {
+        _escuchados = snap.docs.map((doc) {
+          var data = doc.data();
+          if (data.containsKey('titulo') && data.containsKey('url_id')) {
+            return "${data['titulo']}-${data['url_id']}";
+          }
+          return doc.id.replaceAll('_', ' ');
+        }).toList();
+      });
     }
   }
 
@@ -93,7 +101,6 @@ class _ListadoScreenState extends State<ListadoScreen> {
       var urlApi = Uri.parse(
         "https://api.github.com/repos/$repoOwner/$repoName/contents/$path",
       );
-
       var res = await http.get(
         urlApi,
         headers: {"Authorization": "token $githubToken"},
@@ -110,7 +117,7 @@ class _ListadoScreenState extends State<ListadoScreen> {
         );
       }
     } catch (e) {
-      print("Error borrando archivo físico: $e");
+      print("error borrando archivo fisico: $e");
     }
   }
 
@@ -119,9 +126,7 @@ class _ListadoScreenState extends State<ListadoScreen> {
       context: context,
       builder: (c) => AlertDialog(
         title: Text("¿Eliminar programa?"),
-        content: Text(
-          "Se borrará el registro y sus archivos físicos (audio y portada).",
-        ),
+        content: Text("Se borrará el registro y sus archivos físicos."),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(c, false),
@@ -129,16 +134,14 @@ class _ListadoScreenState extends State<ListadoScreen> {
           ),
           TextButton(
             onPressed: () => Navigator.pop(c, true),
-            child: Text("Sí, eliminar", style: TextStyle(color: Colors.red)),
+            child: Text("Sí", style: TextStyle(color: Colors.red)),
           ),
         ],
       ),
     );
-
     if (confirmar != true) return;
 
     setState(() => _cargando = true);
-
     try {
       await _borrarArchivoFisico(audio['url']);
       if (audio['imagen'] != null && !audio['imagen'].contains('logo.png')) {
@@ -158,36 +161,29 @@ class _ListadoScreenState extends State<ListadoScreen> {
         List content = jsonDecode(
           utf8.decode(base64.decode(dataJson['content'].replaceAll('\n', ''))),
         );
-
-        int indexABorrar = content.indexWhere(
+        int idx = content.indexWhere(
           (e) =>
               e['url'] == audio['url'] &&
               e['curso'] == audio['curso'] &&
               e['titulo'] == audio['titulo'],
         );
 
-        if (indexABorrar != -1) {
-          content.removeAt(indexABorrar);
-
+        if (idx != -1) {
+          content.removeAt(idx);
           await http.put(
             urlJson,
             headers: {"Authorization": "token $githubToken"},
             body: jsonEncode({
-              "message": "Delete program: ${audio['titulo']}",
+              "message": "Delete: ${audio['titulo']}",
               "content": base64Encode(utf8.encode(jsonEncode(content))),
               "sha": dataJson['sha'],
             }),
           );
         }
       }
-
       await _inicializarLista();
     } catch (e) {
-      print("Error en el proceso de borrado: $e");
       setState(() => _cargando = false);
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text("Error al eliminar el programa")));
     }
   }
 
@@ -245,29 +241,62 @@ class _ListadoScreenState extends State<ListadoScreen> {
             style: TextStyle(fontWeight: FontWeight.bold),
           ),
           children: grupos[curso]!.map((audio) {
-            bool ok = _escuchados.contains(audio['url'].toString());
+            bool escuchado =
+                _escuchados.contains("${audio['titulo']}-${audio['url']}") ||
+                _escuchados.contains(audio['titulo']);
+            String? youtubeUrl = audio['youtube'];
+
             return ListTile(
               leading: Icon(
-                ok ? Icons.check_circle : Icons.radio,
-                color: ok ? Colors.green : Colors.grey,
+                escuchado ? Icons.check_circle : Icons.radio,
+                color: escuchado ? Colors.green : Colors.grey[400],
               ),
-              title: Text(audio['titulo']),
+              title: Text(
+                audio['titulo'],
+                style: TextStyle(fontWeight: FontWeight.w500),
+              ),
               subtitle: Text(
-                audio['descripcion'] ?? audio['categoria'] ?? "",
+                audio['descripcion'] ?? audio['categoria'] ?? "Radio",
                 maxLines: 1,
               ),
-              trailing: isAdmin
-                  ? Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.edit_note, size: 16, color: Colors.orange),
-                        IconButton(
-                          icon: Icon(Icons.delete, color: Colors.red[300]),
-                          onPressed: () => eliminarPrograma(audio),
-                        ),
-                      ],
-                    )
-                  : Icon(Icons.arrow_forward_ios, size: 14),
+              trailing: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (youtubeUrl != null && youtubeUrl.isNotEmpty)
+                    IconButton(
+                      icon: FaIcon(
+                        FontAwesomeIcons.youtube,
+                        color: Color(0xFFFF0000),
+                        size: 20,
+                      ),
+                      onPressed: () async {
+                        final uri = Uri.parse(youtubeUrl);
+                        if (await canLaunchUrl(uri)) {
+                          await launchUrl(
+                            uri,
+                            mode: LaunchMode.externalApplication,
+                          );
+                        }
+                      },
+                    ),
+                  if (isAdmin) ...[
+                    Icon(
+                      Icons.edit_note,
+                      size: 18,
+                      color: Colors.orange.withOpacity(0.6),
+                    ),
+                    IconButton(
+                      icon: Icon(
+                        Icons.delete,
+                        color: Colors.red[300],
+                        size: 20,
+                      ),
+                      onPressed: () => eliminarPrograma(audio),
+                    ),
+                  ] else if (youtubeUrl == null || youtubeUrl.isEmpty)
+                    Icon(Icons.arrow_forward_ios, size: 14, color: Colors.grey),
+                ],
+              ),
               onTap: () async {
                 await Navigator.push(
                   context,
@@ -278,24 +307,28 @@ class _ListadoScreenState extends State<ListadoScreen> {
                     ),
                   ),
                 );
-                _cargarEscuchadosFirebase();
+                await _cargarEscuchadosFirebase();
               },
-              onLongPress: isAdmin ? () async {
-                Map? nuevoMapa = await Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (c) => AdminUploadScreen(programaAEditar: audio))
-                );
-
-                if (nuevoMapa != null) {
-                  setState(() {
-                    int idx = _audiosLocales!.indexWhere((e) => e['url'] == audio['url']);
-                    if (idx != -1) {
-                      _audiosLocales![idx] = nuevoMapa;
+              onLongPress: isAdmin
+                  ? () async {
+                      Map? nuevoMapa = await Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (c) =>
+                              AdminUploadScreen(programaAEditar: audio),
+                        ),
+                      );
+                      if (nuevoMapa != null) {
+                        setState(() {
+                          int idx = _audiosLocales!.indexWhere(
+                            (e) => e['url'] == audio['url'],
+                          );
+                          if (idx != -1) _audiosLocales![idx] = nuevoMapa;
+                        });
+                        _inicializarLista();
+                      }
                     }
-                  });
-                  _inicializarLista();
-                }
-              } : null,
+                  : null,
             );
           }).toList(),
         );
