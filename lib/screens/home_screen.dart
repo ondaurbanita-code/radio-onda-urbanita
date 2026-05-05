@@ -4,6 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:proyecto_ondaurbanita/screens/quienes_somos_screen.dart';
 import 'package:proyecto_ondaurbanita/screens/roles_screen.dart';
+import '../config/custom_drawer.dart';
 import 'admin_upload_screen.dart';
 import 'contact_screen.dart';
 import 'listado_screen.dart';
@@ -105,93 +106,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
     return Scaffold(
       backgroundColor: Colors.grey[50],
-      drawer: Drawer(
-        child: ListView(
-          padding: EdgeInsets.zero,
-          children: [
-            DrawerHeader(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [Colors.orange[700]!, Colors.orange[400]!],
-                ),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Image.asset('assets/logo.png', height: 60),
-                  SizedBox(height: 10),
-                  Text(
-                    "Onda Urbanita",
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            ListTile(
-              leading: Icon(Icons.people),
-              title: Text("Quiénes somos"),
-              onTap: () {
-                Navigator.pop(context);
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (c) => QuienesSomosScreen()),
-                );
-              },
-            ),
-            ListTile(
-              leading: Icon(Icons.send),
-              title: Text("Contacto"),
-              onTap: () {
-                Navigator.pop(context);
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (c) => ContactoScreen()),
-                );
-              },
-            ),
-            ListTile(
-              leading: Icon(Icons.radio),
-              title: Text("Programas"),
-              onTap: () {
-                Navigator.pop(context);
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (c) => ListadoScreen()),
-                );
-              },
-            ),
-            if (_rol == 'superadmin') ...[
-              Divider(),
-              ListTile(
-                leading: Icon(Icons.admin_panel_settings, color: Colors.blue),
-                title: Text("Gestionar Roles"),
-                onTap: () {
-                  Navigator.pop(context);
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (c) => GestionRolesScreen()),
-                  );
-                },
-              ),
-            ],
-            Divider(),
-            if (user != null)
-              ListTile(
-                leading: Icon(Icons.logout, color: Colors.red),
-                title: Text("Cerrar sesión"),
-                onTap: () async {
-                  setState(() => _cargandoDatos = true);
-                  await FirebaseAuth.instance.signOut();
-                  if (mounted) Navigator.pop(context);
-                },
-              ),
-          ],
-        ),
-      ),
+      drawer: CustomDrawer(rol: _rol, nombre: _nombreFirestore),
       appBar: AppBar(
         backgroundColor: Colors.white,
         elevation: 0.5,

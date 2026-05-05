@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 class GestionRolesScreen extends StatefulWidget {
+  const GestionRolesScreen({super.key});
+
   @override
   State<GestionRolesScreen> createState() => _GestionRolesScreenState();
 }

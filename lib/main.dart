@@ -75,7 +75,8 @@ class OndaUrbanitaApp extends StatelessWidget {
         primarySwatch: Colors.orange,
         scaffoldBackgroundColor: Colors.white,
       ),
-      home: HomeScreen(),
+      routes: {'/': (context) => HomeScreen()},
+      initialRoute: '/',
     );
   }
 }

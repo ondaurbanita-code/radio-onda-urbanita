@@ -3,12 +3,13 @@ import 'package:just_audio/just_audio.dart';
 import 'package:just_audio_background/just_audio_background.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import '../config/custom_drawer.dart';
 
 class PlayerScreen extends StatefulWidget {
   final List listaAudios;
   final int indiceInicial;
 
-  PlayerScreen({
+  const PlayerScreen({
     super.key,
     required this.listaAudios,
     required this.indiceInicial,
@@ -24,12 +25,15 @@ class _PlayerScreenState extends State<PlayerScreen> {
   Duration _posicion = Duration.zero;
   Duration _total = Duration.zero;
   bool _cargando = true;
+  String? _rol;
+  String? _nombre;
 
   @override
   void initState() {
     super.initState();
     _player = AudioPlayer();
     _indiceActual = widget.indiceInicial;
+    _cargarInfoUsuario();
 
     _player.positionStream.listen((p) {
       if (mounted) {
@@ -59,6 +63,21 @@ class _PlayerScreenState extends State<PlayerScreen> {
     });
 
     _prepararPlaylist();
+  }
+
+  Future<void> _cargarInfoUsuario() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+    var doc = await FirebaseFirestore.instance
+        .collection('usuarios')
+        .doc(user.uid)
+        .get();
+    if (mounted && doc.exists) {
+      setState(() {
+        _rol = doc.data()?['rol'];
+        _nombre = doc.data()?['nombre'];
+      });
+    }
   }
 
   Future<void> _prepararPlaylist() async {
@@ -202,6 +221,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
     return Scaffold(
       backgroundColor: Colors.grey[50],
+      drawer: CustomDrawer(rol: _rol, nombre: _nombre),
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,

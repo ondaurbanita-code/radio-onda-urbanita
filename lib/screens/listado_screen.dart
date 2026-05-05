@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
+import 'dart:ui';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import '../config/custom_drawer.dart';
 import '../config/secrets.dart';
 import 'player_screen.dart';
 import 'admin_upload_screen.dart';
@@ -23,8 +25,10 @@ class _ListadoScreenState extends State<ListadoScreen> {
 
   List? _audiosLocales;
   bool _cargando = true;
+  String? _urlBorrando;
   List<String> _escuchados = [];
   String? _rol;
+  String? _nombre;
   String? _cursoMasReciente;
 
   @override
@@ -34,19 +38,24 @@ class _ListadoScreenState extends State<ListadoScreen> {
   }
 
   Future<void> _cargarDatos() async {
-    await _cargarRol();
+    await _cargarInfoUsuario();
     await _cargarEscuchadosFirebase();
     await _inicializarLista();
   }
 
-  Future<void> _cargarRol() async {
+  Future<void> _cargarInfoUsuario() async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
     var doc = await FirebaseFirestore.instance
         .collection('usuarios')
         .doc(user.uid)
         .get();
-    if (mounted && doc.exists) setState(() => _rol = doc.data()?['rol']);
+    if (mounted && doc.exists) {
+      setState(() {
+        _rol = doc.data()?['rol'];
+        _nombre = doc.data()?['nombre'];
+      });
+    }
   }
 
   Future<void> _cargarEscuchadosFirebase() async {
@@ -117,7 +126,7 @@ class _ListadoScreenState extends State<ListadoScreen> {
         );
       }
     } catch (e) {
-      print("error borrando archivo fisico: $e");
+      print(e);
     }
   }
 
@@ -126,7 +135,9 @@ class _ListadoScreenState extends State<ListadoScreen> {
       context: context,
       builder: (c) => AlertDialog(
         title: Text("¿Eliminar programa?"),
-        content: Text("Se borrará el registro y sus archivos físicos."),
+        content: Text(
+          "Se borrará de GitHub y el historial de TODOS los usuarios en Firebase. Esta acción es irreversible.",
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(c, false),
@@ -134,15 +145,37 @@ class _ListadoScreenState extends State<ListadoScreen> {
           ),
           TextButton(
             onPressed: () => Navigator.pop(c, true),
-            child: Text("Sí", style: TextStyle(color: Colors.red)),
+            child: Text("Sí, borrar todo", style: TextStyle(color: Colors.red)),
           ),
         ],
       ),
     );
     if (confirmar != true) return;
 
-    setState(() => _cargando = true);
+    setState(() => _urlBorrando = audio['url']);
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text("Eliminando '${audio['titulo']}'..."),
+        duration: Duration(seconds: 2),
+      ),
+    );
+
     try {
+      var registrosFirebase = await FirebaseFirestore.instance
+          .collectionGroup('progreso')
+          .where('titulo', isEqualTo: audio['titulo'])
+          .where('terminado', whereIn: [true, false])
+          .get();
+
+      if (registrosFirebase.docs.isNotEmpty) {
+        WriteBatch batch = FirebaseFirestore.instance.batch();
+        for (var doc in registrosFirebase.docs) {
+          batch.delete(doc.reference);
+        }
+        await batch.commit();
+      }
+
       await _borrarArchivoFisico(audio['url']);
       if (audio['imagen'] != null && !audio['imagen'].contains('logo.png')) {
         await _borrarArchivoFisico(audio['imagen']);
@@ -161,11 +194,9 @@ class _ListadoScreenState extends State<ListadoScreen> {
         List content = jsonDecode(
           utf8.decode(base64.decode(dataJson['content'].replaceAll('\n', ''))),
         );
+
         int idx = content.indexWhere(
-          (e) =>
-              e['url'] == audio['url'] &&
-              e['curso'] == audio['curso'] &&
-              e['titulo'] == audio['titulo'],
+              (e) => e['url'] == audio['url'] && e['titulo'] == audio['titulo'],
         );
 
         if (idx != -1) {
@@ -174,16 +205,37 @@ class _ListadoScreenState extends State<ListadoScreen> {
             urlJson,
             headers: {"Authorization": "token $githubToken"},
             body: jsonEncode({
-              "message": "Delete: ${audio['titulo']}",
+              "message": "Delete total: ${audio['titulo']}",
               "content": base64Encode(utf8.encode(jsonEncode(content))),
               "sha": dataJson['sha'],
             }),
           );
         }
       }
+
       await _inicializarLista();
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text("Programa eliminado correctamente"),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
     } catch (e) {
-      setState(() => _cargando = false);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text("Error al borrar: $e"),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _urlBorrando = null);
+      }
     }
   }
 
@@ -192,6 +244,7 @@ class _ListadoScreenState extends State<ListadoScreen> {
     bool isAdmin = _rol == 'admin' || _rol == 'superadmin';
     return Scaffold(
       backgroundColor: Colors.white,
+      drawer: CustomDrawer(rol: _rol, nombre: _nombre),
       appBar: AppBar(
         centerTitle: true,
         title: Text(
@@ -200,6 +253,7 @@ class _ListadoScreenState extends State<ListadoScreen> {
         ),
         backgroundColor: Colors.white,
         elevation: 0.5,
+        iconTheme: IconThemeData(color: Colors.black),
         actions: [
           if (isAdmin)
             IconButton(
@@ -243,92 +297,126 @@ class _ListadoScreenState extends State<ListadoScreen> {
           children: grupos[curso]!.map((audio) {
             bool escuchado =
                 _escuchados.contains("${audio['titulo']}-${audio['url']}") ||
-                _escuchados.contains(audio['titulo']);
+                    _escuchados.contains(audio['titulo']);
             String? youtubeUrl = audio['youtube'];
+            bool estaBorrando = _urlBorrando == audio['url'];
 
-            return ListTile(
-              leading: Icon(
-                escuchado ? Icons.check_circle : Icons.radio,
-                color: escuchado ? Colors.green : Colors.grey[400],
-              ),
-              title: Text(
-                audio['titulo'],
-                style: TextStyle(fontWeight: FontWeight.w500),
-              ),
-              subtitle: Text(
-                audio['descripcion'] ?? audio['categoria'] ?? "Radio",
-                maxLines: 1,
-              ),
-              trailing: Row(
-                mainAxisSize: MainAxisSize.min,
+            return ClipRect(
+              child: Stack(
                 children: [
-                  if (youtubeUrl != null && youtubeUrl.isNotEmpty)
-                    IconButton(
-                      icon: FaIcon(
-                        FontAwesomeIcons.youtube,
-                        color: Color(0xFFFF0000),
-                        size: 20,
-                      ),
-                      onPressed: () async {
-                        final uri = Uri.parse(youtubeUrl);
-                        if (await canLaunchUrl(uri)) {
-                          await launchUrl(
-                            uri,
-                            mode: LaunchMode.externalApplication,
+                  IgnorePointer(
+                    ignoring: estaBorrando,
+                    child: Opacity(
+                      opacity: estaBorrando ? 0.4 : 1.0,
+                      child: ListTile(
+                        leading: Icon(
+                          escuchado ? Icons.check_circle : Icons.radio,
+                          color: escuchado ? Colors.green : Colors.grey[400],
+                        ),
+                        title: Text(
+                          audio['titulo'],
+                          style: TextStyle(fontWeight: FontWeight.w500),
+                        ),
+                        subtitle: Text(
+                          audio['descripcion'] ?? audio['categoria'] ?? "Radio",
+                          maxLines: 1,
+                        ),
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            if (youtubeUrl != null && youtubeUrl.isNotEmpty)
+                              IconButton(
+                                icon: FaIcon(
+                                  FontAwesomeIcons.youtube,
+                                  color: Color(0xFFFF0000),
+                                  size: 20,
+                                ),
+                                onPressed: () async {
+                                  final uri = Uri.parse(youtubeUrl);
+                                  if (await canLaunchUrl(uri)) {
+                                    await launchUrl(
+                                      uri,
+                                      mode: LaunchMode.externalApplication,
+                                    );
+                                  }
+                                },
+                              ),
+                            if (isAdmin) ...[
+                              Icon(
+                                Icons.edit_note,
+                                size: 18,
+                                color: Colors.orange.withOpacity(0.6),
+                              ),
+                              IconButton(
+                                icon: Icon(
+                                  Icons.delete,
+                                  color: Colors.red[300],
+                                  size: 20,
+                                ),
+                                onPressed: () => eliminarPrograma(audio),
+                              ),
+                            ] else if (youtubeUrl == null || youtubeUrl.isEmpty)
+                              Icon(
+                                Icons.arrow_forward_ios,
+                                size: 14,
+                                color: Colors.grey,
+                              ),
+                          ],
+                        ),
+                        onTap: () async {
+                          await Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (c) => PlayerScreen(
+                                listaAudios: grupos[curso]!,
+                                indiceInicial: grupos[curso]!.indexOf(audio),
+                              ),
+                            ),
                           );
+                          await _cargarEscuchadosFirebase();
+                        },
+                        onLongPress: isAdmin
+                            ? () async {
+                          Map? nuevoMapa = await Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (c) => AdminUploadScreen(
+                                programaAEditar: audio,
+                              ),
+                            ),
+                          );
+                          if (nuevoMapa != null) {
+                            setState(() {
+                              int idx = _audiosLocales!.indexWhere(
+                                    (e) => e['url'] == audio['url'],
+                              );
+                              if (idx != -1)
+                                _audiosLocales![idx] = nuevoMapa;
+                            });
+                            _inicializarLista();
+                          }
                         }
-                      },
-                    ),
-                  if (isAdmin) ...[
-                    Icon(
-                      Icons.edit_note,
-                      size: 18,
-                      color: Colors.orange.withOpacity(0.6),
-                    ),
-                    IconButton(
-                      icon: Icon(
-                        Icons.delete,
-                        color: Colors.red[300],
-                        size: 20,
+                            : null,
                       ),
-                      onPressed: () => eliminarPrograma(audio),
-                    ),
-                  ] else if (youtubeUrl == null || youtubeUrl.isEmpty)
-                    Icon(Icons.arrow_forward_ios, size: 14, color: Colors.grey),
-                ],
-              ),
-              onTap: () async {
-                await Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (c) => PlayerScreen(
-                      listaAudios: grupos[curso]!,
-                      indiceInicial: grupos[curso]!.indexOf(audio),
                     ),
                   ),
-                );
-                await _cargarEscuchadosFirebase();
-              },
-              onLongPress: isAdmin
-                  ? () async {
-                      Map? nuevoMapa = await Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (c) =>
-                              AdminUploadScreen(programaAEditar: audio),
+                  if (estaBorrando)
+                    Positioned.fill(
+                      child: BackdropFilter(
+                        filter: ImageFilter.blur(sigmaX: 4, sigmaY: 4),
+                        child: Container(
+                          color: Colors.white.withOpacity(0.1),
+                          child: Center(
+                            child: CircularProgressIndicator(
+                              color: Colors.orange,
+                              strokeWidth: 2,
+                            ),
+                          ),
                         ),
-                      );
-                      if (nuevoMapa != null) {
-                        setState(() {
-                          int idx = _audiosLocales!.indexWhere(
-                            (e) => e['url'] == audio['url'],
-                          );
-                          if (idx != -1) _audiosLocales![idx] = nuevoMapa;
-                        });
-                        _inicializarLista();
-                      }
-                    }
-                  : null,
+                      ),
+                    ),
+                ],
+              ),
             );
           }).toList(),
         );

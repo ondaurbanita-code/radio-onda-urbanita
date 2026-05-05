@@ -9,13 +9,15 @@ import '../config/secrets.dart';
 class AdminUploadScreen extends StatefulWidget {
   final Map? programaAEditar;
 
-  AdminUploadScreen({this.programaAEditar});
+  const AdminUploadScreen({super.key, this.programaAEditar});
 
   @override
   State<AdminUploadScreen> createState() => _AdminUploadScreenState();
 }
 
 class _AdminUploadScreenState extends State<AdminUploadScreen> {
+  final _formKey = GlobalKey<FormState>();
+
   final tituloCtrl = TextEditingController();
   final categoriaCtrl = TextEditingController();
   final colabCtrl = TextEditingController();
@@ -110,13 +112,12 @@ class _AdminUploadScreenState extends State<AdminUploadScreen> {
       );
       client.close();
     } catch (e) {
-      print(e);
+      debugPrint(e.toString());
     }
   }
 
   Future<void> subirAGithub() async {
     if (widget.programaAEditar == null && archivoAudio == null) return;
-    if (tituloCtrl.text.isEmpty || cursoCtrl.text.isEmpty) return;
 
     setState(() => subiendo = true);
     try {
@@ -168,11 +169,15 @@ class _AdminUploadScreenState extends State<AdminUploadScreen> {
       actualizarProgreso(1.0, "¡Listo!");
       await Future.delayed(Duration(seconds: 1));
 
-      Navigator.pop(context, itemActualizado);
+      if (mounted) {
+        Navigator.pop(context, itemActualizado);
+      }
     } catch (e) {
-      print(e);
+      debugPrint(e.toString());
     } finally {
-      if (mounted) setState(() => subiendo = false);
+      if (mounted) {
+        setState(() => subiendo = false);
+      }
     }
   }
 
@@ -267,64 +272,96 @@ class _AdminUploadScreenState extends State<AdminUploadScreen> {
   Widget _buildFormulario() {
     return SingleChildScrollView(
       padding: EdgeInsets.all(20),
-      child: Column(
-        children: [
-          TextField(
-            controller: tituloCtrl,
-            decoration: InputDecoration(labelText: "Nombre"),
-          ),
-          TextField(
-            controller: colabCtrl,
-            decoration: InputDecoration(labelText: "Colaboradores"),
-          ),
-          TextField(
-            controller: categoriaCtrl,
-            decoration: InputDecoration(labelText: "Categoría"),
-          ),
-          TextField(
-            controller: cursoCtrl,
-            keyboardType: TextInputType.number,
-            inputFormatters: [CursoInputFormatter()],
-            decoration: InputDecoration(labelText: "Curso (25/26)"),
-          ),
-          TextField(
-            controller: youtubeCtrl,
-            decoration: InputDecoration(labelText: "Link YouTube"),
-          ),
-          TextField(
-            controller: descCtrl,
-            maxLines: 2,
-            decoration: InputDecoration(labelText: "Descripción"),
-          ),
-          SizedBox(height: 20),
-          ListTile(
-            leading: Icon(Icons.audio_file, color: Colors.orange),
-            title: Text(
-              archivoAudio?.name ??
-                  (widget.programaAEditar != null
-                      ? "Audio ya subido"
-                      : "Seleccionar MP3"),
+      child: Form(
+        key: _formKey,
+        child: Column(
+          children: [
+            TextFormField(
+              controller: tituloCtrl,
+              decoration: InputDecoration(labelText: "Nombre"),
+              validator: (v) => v!.isEmpty ? "El nombre es obligatorio" : null,
             ),
-            onTap: seleccionarAudio,
-          ),
-          ListTile(
-            leading: Icon(Icons.image, color: Colors.blue),
-            title: Text(archivoPortada?.name ?? "Cambiar Portada (Opcional)"),
-            onTap: seleccionarPortada,
-          ),
-          SizedBox(height: 30),
-          SizedBox(
-            width: double.infinity,
-            height: 50,
-            child: ElevatedButton(
-              onPressed: subirAGithub,
-              style: ElevatedButton.styleFrom(backgroundColor: Colors.orange),
-              child: Text(
-                widget.programaAEditar == null ? "PUBLICAR" : "GUARDAR CAMBIOS",
+            TextFormField(
+              controller: colabCtrl,
+              decoration: InputDecoration(labelText: "Colaboradores"),
+            ),
+            TextFormField(
+              controller: categoriaCtrl,
+              decoration: InputDecoration(labelText: "Categoría"),
+            ),
+            TextFormField(
+              controller: cursoCtrl,
+              keyboardType: TextInputType.number,
+              inputFormatters: [CursoInputFormatter()],
+              decoration: InputDecoration(
+                labelText: "Curso (25/26)",
+                hintText: "Ej: 24/25",
+              ),
+              validator: (value) {
+                if (value == null || value.isEmpty) {
+                  return "Introduce un curso";
+                }
+                if (value.length >= 2) {
+                  int yearEscrito = int.parse(value.substring(0, 2));
+                  int yearActual = int.parse(
+                    DateTime.now().year.toString().substring(2),
+                  );
+                  if (yearEscrito > yearActual) {
+                    return "Estás intentando poner una fecha futura";
+                  }
+                }
+                if (value.length < 5) {
+                  return "Formato incompleto (XX/XX)";
+                }
+                return null;
+              },
+            ),
+            TextFormField(
+              controller: youtubeCtrl,
+              decoration: InputDecoration(labelText: "Link YouTube"),
+            ),
+            TextFormField(
+              controller: descCtrl,
+              maxLines: 2,
+              decoration: InputDecoration(labelText: "Descripción"),
+            ),
+            SizedBox(height: 20),
+            ListTile(
+              leading: Icon(Icons.audio_file, color: Colors.orange),
+              title: Text(
+                archivoAudio?.name ??
+                    (widget.programaAEditar != null
+                        ? "Audio ya subido"
+                        : "Seleccionar MP3"),
+              ),
+              onTap: seleccionarAudio,
+            ),
+            ListTile(
+              leading: Icon(Icons.image, color: Colors.blue),
+              title: Text(archivoPortada?.name ?? "Cambiar Portada (Opcional)"),
+              onTap: seleccionarPortada,
+            ),
+            SizedBox(height: 30),
+            SizedBox(
+              width: double.infinity,
+              height: 50,
+              child: ElevatedButton(
+                onPressed: () {
+                  if (_formKey.currentState!.validate()) {
+                    subirAGithub();
+                  }
+                },
+                style: ElevatedButton.styleFrom(backgroundColor: Colors.orange),
+                child: Text(
+                  widget.programaAEditar == null
+                      ? "PUBLICAR"
+                      : "GUARDAR CAMBIOS",
+                  style: TextStyle(color: Colors.white),
+                ),
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
