@@ -59,32 +59,30 @@ class CustomDrawer extends StatelessWidget {
     }
   }
 
-  Future<void> _reestablecerPassword(BuildContext context) async {
+  Future<void> _reestablecerPasswordConMessenger(
+    ScaffoldMessengerState messenger,
+  ) async {
     final user = FirebaseAuth.instance.currentUser;
 
     if (user != null && user.email != null) {
       try {
         await FirebaseAuth.instance.sendPasswordResetEmail(email: user.email!);
 
-        if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                "Te hemos mandado un correo para cambiar la clave. revisa el spam!",
-              ),
-              backgroundColor: Colors.green,
+        messenger.showSnackBar(
+          SnackBar(
+            content: Text(
+              "Te hemos mandado un correo para cambiar la clave. ¡Revisa el spam!",
             ),
-          );
-        }
+            backgroundColor: Colors.green,
+          ),
+        );
       } catch (e) {
-        if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text("Vaya, parece que hubo un error: $e"),
-              backgroundColor: Colors.red,
-            ),
-          );
-        }
+        messenger.showSnackBar(
+          SnackBar(
+            content: Text("Vaya, parece que hubo un error al enviar el correo"),
+            backgroundColor: Colors.red,
+          ),
+        );
       }
     }
   }
@@ -255,8 +253,9 @@ class CustomDrawer extends StatelessWidget {
             padding: EdgeInsets.symmetric(horizontal: 16),
             child: TextButton.icon(
               onPressed: () {
+                final messenger = ScaffoldMessenger.of(context);
                 Navigator.pop(context);
-                _reestablecerPassword(context);
+                _reestablecerPasswordConMessenger(messenger);
               },
               icon: Icon(Icons.lock_reset, color: Colors.blueGrey),
               label: Text(
