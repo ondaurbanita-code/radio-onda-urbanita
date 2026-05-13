@@ -42,6 +42,18 @@ class _GestionRolesScreenState extends State<GestionRolesScreen> {
 
           var docs = snapshot.data!.docs;
 
+          docs.sort((a, b) {
+            String? rolA = a.data()['rol'];
+            String? rolB = b.data()['rol'];
+
+            // si a es superadmin, va primero (-1)
+            if (rolA == 'superadmin') return -1;
+            // si b es superadmin, a va después (1)
+            if (rolB == 'superadmin') return 1;
+            // si ninguno lo es, se quedan como están (0)
+            return 0;
+          });
+
           return ListView.separated(
             padding: EdgeInsets.all(10),
             itemCount: docs.length,

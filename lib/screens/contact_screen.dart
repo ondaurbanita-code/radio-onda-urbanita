@@ -68,7 +68,7 @@ class _ContactoScreenState extends State<ContactoScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.white,
-      appBar: AppBar(
+      appBar: AppBar(centerTitle: true,
         title: Text(
           "Contacto",
           style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold),
