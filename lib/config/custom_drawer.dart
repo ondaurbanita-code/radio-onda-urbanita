@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:proyecto_ondaurbanita/screens/admin_upload_screen.dart';
 import 'package:proyecto_ondaurbanita/screens/home_screen.dart';
+import 'package:proyecto_ondaurbanita/screens/roles_screen.dart';
 
 import '../screens/contact_screen.dart';
 import '../screens/quienes_somos_screen.dart';
@@ -53,6 +55,36 @@ class CustomDrawer extends StatelessWidget {
             backgroundColor: Colors.red,
           ),
         );
+      }
+    }
+  }
+
+  Future<void> _reestablecerPassword(BuildContext context) async {
+    final user = FirebaseAuth.instance.currentUser;
+
+    if (user != null && user.email != null) {
+      try {
+        await FirebaseAuth.instance.sendPasswordResetEmail(email: user.email!);
+
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                "Te hemos mandado un correo para cambiar la clave. revisa el spam!",
+              ),
+              backgroundColor: Colors.green,
+            ),
+          );
+        }
+      } catch (e) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text("Vaya, parece que hubo un error: $e"),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
       }
     }
   }
@@ -195,7 +227,13 @@ class CustomDrawer extends StatelessWidget {
             ListTile(
               leading: Icon(Icons.admin_panel_settings, color: Colors.blue),
               title: Text("Gestionar Roles"),
-              onTap: () {},
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (c) => GestionRolesScreen()),
+                );
+              },
             ),
           if (user != null && rol != 'superadmin')
             ListTile(
@@ -212,6 +250,21 @@ class CustomDrawer extends StatelessWidget {
               title: Text("Cerrar sesión"),
               onTap: () => FirebaseAuth.instance.signOut(),
             ),
+          Divider(),
+          Padding(
+            padding: EdgeInsets.symmetric(horizontal: 16),
+            child: TextButton.icon(
+              onPressed: () {
+                Navigator.pop(context);
+                _reestablecerPassword(context);
+              },
+              icon: Icon(Icons.lock_reset, color: Colors.blueGrey),
+              label: Text(
+                "Restablecer Contraseña",
+                style: TextStyle(color: Colors.blueGrey),
+              ),
+            ),
+          ),
         ],
       ),
     );

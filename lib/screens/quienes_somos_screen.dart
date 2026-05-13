@@ -196,6 +196,21 @@ class QuienesSomosScreen extends StatelessWidget {
                             color: Colors.orange[800],
                           ),
                         ),
+                        Text(
+                          "Desarrollo del Proyecto",
+                          style: TextStyle(
+                            color: Colors.grey,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        Text(
+                          "Alejandro Rodríguez Romero",
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.orange[800],
+                          ),
+                        ),
                       ],
                     ),
                   ),

@@ -221,7 +221,6 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
     return Scaffold(
       backgroundColor: Colors.grey[50],
-      drawer: CustomDrawer(rol: _rol, nombre: _nombre),
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
