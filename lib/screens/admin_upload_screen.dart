@@ -3,7 +3,7 @@ import 'package:file_picker/file_picker.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:googleapis_auth/auth_io.dart' as auth;
-import '../config/curso_input_formatter.dart';
+import '../widgets/curso_input_formatter.dart';
 import '../config/secrets.dart';
 
 class AdminUploadScreen extends StatefulWidget {

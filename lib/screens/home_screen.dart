@@ -4,7 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:proyecto_ondaurbanita/screens/quienes_somos_screen.dart';
 import 'package:proyecto_ondaurbanita/screens/roles_screen.dart';
-import '../config/custom_drawer.dart';
+import '../widgets/custom_drawer.dart';
 import 'admin_upload_screen.dart';
 import 'contact_screen.dart';
 import 'listado_screen.dart';

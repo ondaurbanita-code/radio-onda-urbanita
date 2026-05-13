@@ -3,7 +3,7 @@ import 'package:just_audio/just_audio.dart';
 import 'package:just_audio_background/just_audio_background.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import '../config/custom_drawer.dart';
+import '../widgets/custom_drawer.dart';
 
 class PlayerScreen extends StatefulWidget {
   final List listaAudios;
