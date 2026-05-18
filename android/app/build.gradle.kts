@@ -6,7 +6,7 @@ plugins {
 }
 
 android {
-    namespace = "com.example.proyecto_ondaurbanita"
+    namespace = "com.ondaurbanita.radio"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
@@ -23,7 +23,7 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.example.proyecto_ondaurbanita"
+        applicationId = "com.ondaurbanita.radio"
         // Forzado a 21 para el plugin de audio
         minSdk = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion
