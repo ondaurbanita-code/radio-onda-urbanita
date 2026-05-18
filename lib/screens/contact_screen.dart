@@ -12,12 +12,16 @@ class ContactoScreen extends StatefulWidget {
 }
 
 class _ContactoScreenState extends State<ContactoScreen> {
+  // controlador para capturar la sugerencia o mensaje que redacte el usuario
   final TextEditingController _mensajeController = TextEditingController();
-  bool _enviando = false;
+  bool _enviando =
+      false; // booleano para controlar el spinner de carga en el boton
 
+  // metodo asincrono que usa el paquete mailer para mandar un correo por smtp
   Future<void> _enviarDirecto() async {
     String mensaje = _mensajeController.text.trim();
 
+    // validacion preventiva para no mandar correos totalmente vacios
     if (mensaje.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text("Escribe algo antes de enviar")),
@@ -27,10 +31,11 @@ class _ContactoScreenState extends State<ContactoScreen> {
 
     setState(() => _enviando = true);
 
-
+    // configuramos las credenciales trayendo la clave de aplicacion desde el secrets
     String username = 'ondaurbanita@gmail.com';
     String password = Secrets.gmailPassword;
 
+    // configuramos el servidor smtp de google usando el puerto ssl seguro
     final smtpServer = SmtpServer(
       'smtp.gmail.com',
       port: 465,
@@ -39,14 +44,19 @@ class _ContactoScreenState extends State<ContactoScreen> {
       password: password,
     );
 
+    // construimos la estructura del mensaje asignando emisor, receptor y el cuerpo del texto
     final message = Message()
       ..from = Address(username, 'App Onda Urbanita')
-      ..recipients.add('ondaurbanita@gmail.com')
+      ..recipients.add(
+        'ondaurbanita@gmail.com',
+      ) // el correo se manda al propio administrador
       ..subject = 'Nueva sugerencia de usuario'
       ..text = mensaje;
 
     try {
+      // realizamos el envio asincrono conectando con el servidor de correo
       await send(message, smtpServer);
+      // si todo va bien y la pantalla sigue montada, avisamos y limpiamos el formulario
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text("¡Mensaje enviado correctamente!")),
@@ -60,6 +70,7 @@ class _ContactoScreenState extends State<ContactoScreen> {
         ).showSnackBar(SnackBar(content: Text("Error al enviar: $e")));
       }
     } finally {
+      // liberamos el estado de enviando para reactivar el boton en la ui
       if (mounted) setState(() => _enviando = false);
     }
   }
@@ -68,7 +79,8 @@ class _ContactoScreenState extends State<ContactoScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.white,
-      appBar: AppBar(centerTitle: true,
+      appBar: AppBar(
+        centerTitle: true,
         title: Text(
           "Contacto",
           style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold),
@@ -92,10 +104,13 @@ class _ContactoScreenState extends State<ContactoScreen> {
               style: TextStyle(color: Colors.grey[600]),
             ),
             SizedBox(height: 30),
+            // caja de texto multilineal para redactar el mensaje de soporte
             TextField(
               controller: _mensajeController,
               maxLines: 8,
+              // definimos un tamaño alto para que quepan varias lineas de texto
               enabled: !_enviando,
+              // bloqueamos la edicion mientras se procesa el envio del correo
               decoration: InputDecoration(
                 hintText: "Escribe tu sugerencia...",
                 filled: true,
@@ -106,11 +121,13 @@ class _ContactoScreenState extends State<ContactoScreen> {
               ),
             ),
             SizedBox(height: 30),
+            // boton de envio que alterna su contenido de forma condicional segun el booleano
             SizedBox(
               width: double.infinity,
               height: 55,
               child: ElevatedButton(
                 onPressed: _enviando ? null : _enviarDirecto,
+                // se desactiva si esta enviando
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.orange[800],
                   shape: RoundedRectangleBorder(
@@ -118,7 +135,9 @@ class _ContactoScreenState extends State<ContactoScreen> {
                   ),
                 ),
                 child: _enviando
-                    ? CircularProgressIndicator(color: Colors.white)
+                    ? CircularProgressIndicator(
+                        color: Colors.white,
+                      ) // spinner blanco de carga
                     : Text(
                         "Enviar ahora",
                         style: TextStyle(color: Colors.white, fontSize: 18),

@@ -3,8 +3,9 @@ import 'package:flutter/services.dart';
 class CursoInputFormatter extends TextInputFormatter {
   @override
   TextEditingValue formatEditUpdate(
-      TextEditingValue oldValue, TextEditingValue newValue) {
-
+    TextEditingValue oldValue,
+    TextEditingValue newValue,
+  ) {
     if (newValue.text.length < oldValue.text.length) {
       if (oldValue.text.endsWith('/')) {
         final String t = newValue.text.substring(0, newValue.text.length - 1);

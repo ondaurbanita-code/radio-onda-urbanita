@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'register_screen.dart';
 import 'home_screen.dart';
 
+// widget con estado porque necesitamos controlar los textos introducidos y los errores
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
 
@@ -11,24 +12,30 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
+  // controladores para capturar lo que el usuario escribe en las cajas de texto
   final emailController = TextEditingController();
   final passController = TextEditingController();
   bool mostrarPass = false;
 
+  // variables para guardar el texto del error si la validacion falla
   String? errorEmail;
   String? errorPass;
 
+  // metodo asincrono para conectar con firebase auth y loguear al usuario
   Future<void> iniciarSesion() async {
+    // limpiamos los errores anteriores antes de volver a intentarlo
     setState(() {
       errorEmail = null;
       errorPass = null;
     });
 
     try {
+      // le pasamos las credenciales limpiando los espacios en blanco con trim
       await FirebaseAuth.instance.signInWithEmailAndPassword(
         email: emailController.text.trim(),
         password: passController.text.trim(),
       );
+      // si todo va bien y la pantalla sigue activa, navegamos al home borrando el historico
       if (mounted) {
         Navigator.pushAndRemoveUntil(
           context,
@@ -37,6 +44,7 @@ class _LoginScreenState extends State<LoginScreen> {
         );
       }
     } catch (e) {
+      // si firebase devuelve un error, controlamos el tipo para avisar en la caja correcta
       setState(() {
         String err = e.toString().toLowerCase();
         if (err.contains('user-not-found') || err.contains('invalid-email')) {
@@ -65,6 +73,7 @@ class _LoginScreenState extends State<LoginScreen> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
+            // cargamos el logo del centro escolar y ponemos un icono de radio por si falla la ruta
             Image.asset(
               'assets/logo.png',
               height: 100,
@@ -76,6 +85,7 @@ class _LoginScreenState extends State<LoginScreen> {
               style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
             ),
             SizedBox(height: 40),
+            // campo de texto para el correo electronico conectado a su controlador
             TextField(
               controller: emailController,
               decoration: InputDecoration(
@@ -85,6 +95,7 @@ class _LoginScreenState extends State<LoginScreen> {
               ),
             ),
             SizedBox(height: 20),
+            // campo de la contraseña usando el booleano para ocultar o mostrar los caracteres
             TextField(
               controller: passController,
               obscureText: !mostrarPass,
@@ -92,6 +103,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 labelText: "Contraseña",
                 border: OutlineInputBorder(),
                 errorText: errorPass,
+                // boton del ojo para cambiar el estado de visibilidad de la clave
                 suffixIcon: IconButton(
                   icon: Icon(
                     mostrarPass ? Icons.visibility : Icons.visibility_off,
@@ -101,6 +113,7 @@ class _LoginScreenState extends State<LoginScreen> {
               ),
             ),
             SizedBox(height: 30),
+            // boton principal que dispara el proceso de inicio de sesion asincrono
             ElevatedButton(
               onPressed: iniciarSesion,
               style: ElevatedButton.styleFrom(
@@ -109,6 +122,7 @@ class _LoginScreenState extends State<LoginScreen> {
               ),
               child: Text("Entrar", style: TextStyle(color: Colors.white)),
             ),
+            // boton secundario para alternar hacia la vista de registro
             TextButton(
               onPressed: () => Navigator.push(
                 context,

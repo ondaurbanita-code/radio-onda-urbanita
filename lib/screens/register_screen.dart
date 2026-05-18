@@ -11,27 +11,33 @@ class RegisterScreen extends StatefulWidget {
 }
 
 class _RegisterScreenState extends State<RegisterScreen> {
+  // controladores para capturar el texto introducido en el formulario de alta
   final nombreController = TextEditingController();
   final emailController = TextEditingController();
   final passController = TextEditingController();
   bool mostrarPass = false;
 
+  // variables de estado para pintar los errores debajo de cada textfield
   String? errorNombre;
   String? errorEmail;
   String? errorPass;
 
+  // funcion de test que usa una expresion regular para obligar a meter claves robustas
   bool validarPassword(String password) {
     final regExp = RegExp(r'^(?=.*[!@#\$&*~\.])(?=.{6,12}$)');
     return regExp.hasMatch(password);
   }
 
+  // metodo asincrono para dar de alta en auth y meter los metadatos en firestore
   Future<void> registrarUsuario() async {
+    // reseteamos los textos de error antes de lanzar una nueva validacion
     setState(() {
       errorNombre = null;
       errorEmail = null;
       errorPass = null;
     });
 
+    // bloque de validacion manual preventiva para evitar peticiones vacias a firebase
     if (nombreController.text.isEmpty) {
       setState(() => errorNombre = "Introduce un nombre de usuario");
       return;
@@ -48,26 +54,31 @@ class _RegisterScreenState extends State<RegisterScreen> {
     }
 
     try {
+      // paso 1: creamos el usuario en el modulo de firebase authentication
       UserCredential userCredential = await FirebaseAuth.instance
           .createUserWithEmailAndPassword(
             email: emailController.text.trim(),
             password: passController.text.trim(),
           );
 
+      // paso 2: actualizamos el perfil nativo de auth para asignarle su nombre
       await userCredential.user?.updateDisplayName(
         nombreController.text.trim(),
       );
 
+      // paso 3: creamos su documento de base de datos en firestore mapeado con su uid
       await FirebaseFirestore.instance
           .collection('usuarios')
           .doc(userCredential.user?.uid)
           .set({
             'nombre': nombreController.text.trim(),
             'email': emailController.text.trim(),
-            'rol': 'user',
+            'rol':
+                'user', // rol por defecto para los nuevos oyentes de la radio
             'fechaRegistro': DateTime.now(),
           });
 
+      // si todo el proceso en la nube termina bien, saltamos al home limpiando el arbol de vistas
       if (mounted) {
         Navigator.pushAndRemoveUntil(
           context,
@@ -76,6 +87,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
         );
       }
     } catch (e) {
+      // capturamos excepciones especificas del backend de firebase para dar feedback
       setState(() {
         String err = e.toString().toLowerCase();
         if (err.contains('email-already-in-use')) {
@@ -98,6 +110,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
         backgroundColor: Colors.transparent,
         iconTheme: IconThemeData(color: Colors.black),
       ),
+      // usamos un singlechildscrollview para evitar desbordamientos si sale el teclado en pantalla
       body: SingleChildScrollView(
         padding: EdgeInsets.all(30),
         child: Column(

@@ -20,11 +20,13 @@ class PlayerScreen extends StatefulWidget {
 }
 
 class _PlayerScreenState extends State<PlayerScreen> {
+  // variables del motor de audio y control de tiempos de la cancion
   late AudioPlayer _player;
   late int _indiceActual;
   Duration _posicion = Duration.zero;
   Duration _total = Duration.zero;
-  bool _cargando = true;
+  bool _cargando =
+      true; // indicador para esperar a que monte el buffer de audio
   String? _rol;
   String? _nombre;
 
@@ -35,23 +37,31 @@ class _PlayerScreenState extends State<PlayerScreen> {
     _indiceActual = widget.indiceInicial;
     _cargarInfoUsuario();
 
+    // stream activo que detecta la posicion del segundo actual y la guarda en firebase
     _player.positionStream.listen((p) {
       if (mounted) {
         setState(() => _posicion = p);
-        _guardarProgresoActual(p);
+        _guardarProgresoActual(
+          p,
+        ); // guarda el progreso de forma constante en la nube
       }
     });
 
+    // stream para obtener la duracion maxima del podcast
     _player.durationStream.listen((d) {
       if (mounted) setState(() => _total = d ?? Duration.zero);
     });
 
+    // stream que detecta cuando el audio llega al final del todo de forma automatica
     _player.playerStateStream.listen((state) {
       if (state.processingState == ProcessingState.completed) {
-        _registrarProgresoTerminado(true);
+        _registrarProgresoTerminado(
+          true,
+        ); // lo marca como completado en firebase
       }
     });
 
+    // stream que se entera si cambia de cancion para actualizar el titulo en la pantalla
     _player.sequenceStateStream.listen((sequenceState) {
       if (sequenceState == null) return;
       final index = sequenceState.currentIndex;
@@ -65,6 +75,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     _prepararPlaylist();
   }
 
+  // recupera los datos del perfil por si abrimos el menu lateral desde el reproductor
   Future<void> _cargarInfoUsuario() async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
@@ -80,6 +91,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     }
   }
 
+  // empaqueta la lista de reproduccion con los metadatos obligatorios para segundo plano
   Future<void> _prepararPlaylist() async {
     setState(() => _cargando = true);
 
@@ -93,7 +105,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
             album: "Onda Urbanita",
             title: audio['titulo'],
             artist: audio['colaboradores'] ?? "Radio",
-            artUri: Uri.parse(audio['imagen']),
+            artUri: Uri.parse(
+              audio['imagen'],
+            ), // caratula que se vera en la barra del sistema
           ),
         );
       }).toList(),
@@ -101,11 +115,15 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
     try {
       await _player.setAudioSource(playlist, initialIndex: _indiceActual);
-      await _player.setLoopMode(LoopMode.off);
+      await _player.setLoopMode(
+        LoopMode.off,
+      ); // desactivamos bucles automaticos
 
+      // control de continuidad de escucha: recuperamos el segundo donde el usuario se quedo
       final user = FirebaseAuth.instance.currentUser;
       if (user != null) {
         final audio = widget.listaAudios[_indiceActual];
+        // reemplazamos espacios por guiones para que el id del documento de progreso sea limpio
         final tituloDoc = audio['titulo'].toString().replaceAll(' ', '_');
         var doc = await FirebaseFirestore.instance
             .collection('usuarios')
@@ -114,6 +132,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
             .doc(tituloDoc)
             .get();
 
+        // si existe registro previo movemos el puntero del reproductor (seek) a ese segundo
         if (doc.exists && doc.data()?['segundos_actuales'] != null) {
           int seg = doc.data()!['segundos_actuales'];
           await _player.seek(Duration(seconds: seg), index: _indiceActual);
@@ -122,7 +141,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
       if (mounted) {
         setState(() => _cargando = false);
-        _player.play();
+        _player.play(); // arranca el play de forma automatica al entrar
       }
     } catch (e) {
       if (mounted) setState(() => _cargando = false);
@@ -135,20 +154,26 @@ class _PlayerScreenState extends State<PlayerScreen> {
     }
   }
 
+  // funcion para ir atras o reiniciar el audio actual segun el segundo donde este
   void _irAAnterior() {
     if (_player.position.inSeconds >= 2) {
-      _player.seek(Duration.zero);
+      _player.seek(
+        Duration.zero,
+      ); // si lleva mas de 2 segundos vuelve al principio del audio
     } else if (_player.hasPrevious) {
-      _player.seekToPrevious();
+      _player
+          .seekToPrevious(); // si esta al inicio pasa al podcast anterior de la lista
     }
   }
 
+  // actualiza de forma asincrona la posicion actual de reproduccion en firestore
   Future<void> _guardarProgresoActual(Duration p) async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null || _total == Duration.zero || _cargando) return;
 
     final audio = widget.listaAudios[_indiceActual];
     final tituloDoc = audio['titulo'].toString().replaceAll(' ', '_');
+    // si faltan menos de 3 segundos para el final lo marcamos como completado de forma automatica
     bool terminado = (_total.inSeconds - p.inSeconds) <= 3;
 
     try {
@@ -157,18 +182,22 @@ class _PlayerScreenState extends State<PlayerScreen> {
           .doc(user.uid)
           .collection('progreso')
           .doc(tituloDoc)
-          .set({
-            'titulo': audio['titulo'],
-            'url_id': audio['url'],
-            'segundos_actuales': p.inSeconds,
-            'terminado': terminado,
-            'ultimo_acceso': FieldValue.serverTimestamp(),
-          }, SetOptions(merge: true));
+          .set(
+            {
+              'titulo': audio['titulo'],
+              'url_id': audio['url'],
+              'segundos_actuales': p.inSeconds,
+              'terminado': terminado,
+              'ultimo_acceso': FieldValue.serverTimestamp(),
+            },
+            SetOptions(merge: true),
+          ); // el merge es critico para no romper otros campos del perfil
     } catch (e) {
       debugPrint(e.toString());
     }
   }
 
+  // fuerza el marcado de terminado al saltar la excepcion de finalizacion del reproductor
   Future<void> _registrarProgresoTerminado(bool terminado) async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null || _cargando) return;
@@ -193,6 +222,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     }
   }
 
+  // funcion auxiliar para formatear los milisegundos crudos en texto legible mm:ss
   String _formatearTiempo(Duration duration) {
     String dosDigitos(int n) => n.toString().padLeft(2, "0");
     String minutos = dosDigitos(duration.inMinutes.remainder(60));
@@ -202,7 +232,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   @override
   void dispose() {
-    _player.dispose();
+    _player
+        .dispose(); // obligatorio apagar el reproductor al salir para liberar la ram del dispositivo
     super.dispose();
   }
 
@@ -236,6 +267,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
+            // caja contenedora con sombreado difuminado para la caratula del programa
             Container(
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(20),
@@ -282,6 +314,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
               ),
             ),
             SizedBox(height: 30),
+            // barra deslizante (slider) estilizada conectada al estado del reproductor
             SliderTheme(
               data: SliderTheme.of(context).copyWith(
                 activeTrackColor: Colors.orange[700],
@@ -294,9 +327,12 @@ class _PlayerScreenState extends State<PlayerScreen> {
                 max: _total.inSeconds.toDouble() > 0
                     ? _total.inSeconds.toDouble()
                     : 1.0,
-                onChanged: (v) => _player.seek(Duration(seconds: v.toInt())),
+                onChanged: (v) => _player.seek(
+                  Duration(seconds: v.toInt()),
+                ), // seek inmediato si el usuario arrastra la barra
               ),
             ),
+            // textos informativos para los minutos de reproduccion transcurridos y totales
             Padding(
               padding: EdgeInsets.symmetric(horizontal: 20),
               child: Row(
@@ -308,6 +344,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
               ),
             ),
             SizedBox(height: 20),
+            // botonera de control central con botones redondeados grandes para primaria
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceEvenly,
               children: [
@@ -316,17 +353,19 @@ class _PlayerScreenState extends State<PlayerScreen> {
                   onPressed:
                       _player.hasPrevious || _player.position.inSeconds >= 2
                       ? () => _irAAnterior()
-                      : null,
+                      : null, // se desactiva visualmente si no hay pista anterior
                 ),
                 GestureDetector(
                   onTap: () async {
                     final processingState = _player.processingState;
 
+                    // control de re-reproduccion limpia si el podcast ya habia finalizado
                     if (processingState == ProcessingState.completed) {
                       await _player.stop();
                       await _player.seek(Duration.zero, index: _indiceActual);
                       _player.play();
                     } else {
+                      // alterna de forma clasica entre pausar y reproducir
                       if (_player.playing) {
                         await _player.pause();
                       } else {
@@ -334,6 +373,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
                       }
                     }
                   },
+                  // boton de play/pause reactivo conectado directamente al flujo de estado del motor de audio
                   child: StreamBuilder<PlayerState>(
                     stream: _player.playerStateStream,
                     builder: (context, snapshot) {

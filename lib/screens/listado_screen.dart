@@ -19,17 +19,22 @@ class ListadoScreen extends StatefulWidget {
 }
 
 class _ListadoScreenState extends State<ListadoScreen> {
+  // traemos las credenciales guardadas en la clase secreta para conectar con github
   final String githubToken = Secrets.githubToken;
   final String repoOwner = "ondaurbanita-code";
   final String repoName = "radio-onda-urbanita";
 
+  // variables de estado para almacenar los audios descargados y el control de la ui
   List? _audiosLocales;
   bool _cargando = true;
-  String? _urlBorrando;
-  List<String> _escuchados = [];
+  String?
+  _urlBorrando; // almacena la url del audio que se esta eliminando para bloquear su tarjeta
+  List<String> _escuchados =
+      []; // lista de id de audios que el usuario ya ha terminado
   String? _rol;
   String? _nombre;
-  String? _cursoMasReciente;
+  String?
+  _cursoMasReciente; // guarda el curso academico mas alto para expandirlo por defecto
 
   @override
   void initState() {
@@ -37,12 +42,14 @@ class _ListadoScreenState extends State<ListadoScreen> {
     _cargarDatos();
   }
 
+  // cargamos toda la informacion necesaria de golpe al iniciar la pantalla
   Future<void> _cargarDatos() async {
     await _cargarInfoUsuario();
     await _cargarEscuchadosFirebase();
     await _inicializarLista();
   }
 
+  // lee el rol y el nombre del usuario logueado desde su documento de firestore
   Future<void> _cargarInfoUsuario() async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
@@ -58,6 +65,7 @@ class _ListadoScreenState extends State<ListadoScreen> {
     }
   }
 
+  // descarga la coleccion de programas terminados para poder pintarle el tick verde al usuario
   Future<void> _cargarEscuchadosFirebase() async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
@@ -82,6 +90,7 @@ class _ListadoScreenState extends State<ListadoScreen> {
     }
   }
 
+  // descarga el archivo json crudo de github con el timestamp para evitar la cache del navegador
   Future<void> _inicializarLista() async {
     var url = Uri.parse(
       "https://raw.githubusercontent.com/$repoOwner/$repoName/master/lib/lista_audios.json?t=${DateTime.now().millisecondsSinceEpoch}",
@@ -92,6 +101,7 @@ class _ListadoScreenState extends State<ListadoScreen> {
         if (res.statusCode == 200) {
           _audiosLocales = jsonDecode(res.body);
           if (_audiosLocales != null && _audiosLocales!.isNotEmpty) {
+            // extraemos los años de los cursos, los ordenamos de mayor a menor y elegimos el primero
             List<String> cursos = _audiosLocales!
                 .map((a) => (a['curso'] as String?) ?? "24/25")
                 .toList();
@@ -104,18 +114,21 @@ class _ListadoScreenState extends State<ListadoScreen> {
     }
   }
 
+  // funcion tecnica para borrar binarios mp3 o imagenes directamente del repositorio mediante la api v3
   Future<void> _borrarArchivoFisico(String urlCompleta) async {
     try {
       String path = urlCompleta.split('/master/').last;
       var urlApi = Uri.parse(
         "https://api.github.com/repos/$repoOwner/$repoName/contents/$path",
       );
+      // paso 1: pedimos el archivo para obtener su codigo identificador sha obligatorio
       var res = await http.get(
         urlApi,
         headers: {"Authorization": "token $githubToken"},
       );
       if (res.statusCode == 200) {
         var data = jsonDecode(res.body);
+        // paso 2: mandamos la peticion delete pasandole el token y el sha obtenido
         await http.delete(
           urlApi,
           headers: {"Authorization": "token $githubToken"},
@@ -130,7 +143,9 @@ class _ListadoScreenState extends State<ListadoScreen> {
     }
   }
 
+  // proceso principal para borrar un programa de todos los servidores (cascada manual)
   Future<void> eliminarPrograma(Map audio) async {
+    // mostramos un dialogo de confirmacion preventivo
     bool? confirmar = await showDialog(
       context: context,
       builder: (c) => AlertDialog(
@@ -162,6 +177,7 @@ class _ListadoScreenState extends State<ListadoScreen> {
     );
 
     try {
+      // paso 1: buscamos y borramos los registros de progreso de este audio en todos los usuarios usando collectiongroup
       var registrosFirebase = await FirebaseFirestore.instance
           .collectionGroup('progreso')
           .where('titulo', isEqualTo: audio['titulo'])
@@ -169,6 +185,7 @@ class _ListadoScreenState extends State<ListadoScreen> {
           .get();
 
       if (registrosFirebase.docs.isNotEmpty) {
+        // usamos un lote (batch) para borrar todas las referencias de firebase de golpe de forma segura
         WriteBatch batch = FirebaseFirestore.instance.batch();
         for (var doc in registrosFirebase.docs) {
           batch.delete(doc.reference);
@@ -176,11 +193,14 @@ class _ListadoScreenState extends State<ListadoScreen> {
         await batch.commit();
       }
 
+      // paso 2: borramos el archivo mp3 fisico del storage de github
       await _borrarArchivoFisico(audio['url']);
+      // borramos tambien la caratula si no es el logotipo por defecto del centro escolar
       if (audio['imagen'] != null && !audio['imagen'].contains('logo.png')) {
         await _borrarArchivoFisico(audio['imagen']);
       }
 
+      // paso 3: descargamos, decodificamos de base64, modificamos y resubimos el archivo index lista_audios.json
       var urlJson = Uri.parse(
         "https://api.github.com/repos/$repoOwner/$repoName/contents/lib/lista_audios.json",
       );
@@ -195,12 +215,14 @@ class _ListadoScreenState extends State<ListadoScreen> {
           utf8.decode(base64.decode(dataJson['content'].replaceAll('\n', ''))),
         );
 
+        // localizamos la posicion del objeto mapa dentro del array json
         int idx = content.indexWhere(
-              (e) => e['url'] == audio['url'] && e['titulo'] == audio['titulo'],
+          (e) => e['url'] == audio['url'] && e['titulo'] == audio['titulo'],
         );
 
         if (idx != -1) {
-          content.removeAt(idx);
+          content.removeAt(idx); // lo sacamos de la lista
+          // hacemos el put definitivo mandando el nuevo json codificado de nuevo en base64
           await http.put(
             urlJson,
             headers: {"Authorization": "token $githubToken"},
@@ -208,11 +230,13 @@ class _ListadoScreenState extends State<ListadoScreen> {
               "message": "Delete total: ${audio['titulo']}",
               "content": base64Encode(utf8.encode(jsonEncode(content))),
               "sha": dataJson['sha'],
+              // sha del json antiguo obligatorio para modificarlo
             }),
           );
         }
       }
 
+      // refrescamos la lista de la pantalla volviendo a descargar el json actualizado
       await _inicializarLista();
 
       if (mounted) {
@@ -234,7 +258,9 @@ class _ListadoScreenState extends State<ListadoScreen> {
       }
     } finally {
       if (mounted) {
-        setState(() => _urlBorrando = null);
+        setState(
+          () => _urlBorrando = null,
+        ); // liberamos el bloqueo de la interfaz
       }
     }
   }
@@ -255,6 +281,7 @@ class _ListadoScreenState extends State<ListadoScreen> {
         elevation: 0.5,
         iconTheme: IconThemeData(color: Colors.black),
         actions: [
+          // si es administrador, le mostramos el acceso directo para saltar a subir un programa nuevo
           if (isAdmin)
             IconButton(
               icon: Icon(Icons.add_circle_outline, color: Colors.orange),
@@ -263,7 +290,7 @@ class _ListadoScreenState extends State<ListadoScreen> {
                   context,
                   MaterialPageRoute(builder: (c) => AdminUploadScreen()),
                 );
-                _inicializarLista();
+                _inicializarLista(); // actualiza la lista al volver por si ha subido algo
               },
             ),
         ],
@@ -274,6 +301,7 @@ class _ListadoScreenState extends State<ListadoScreen> {
     );
   }
 
+  // construye la lista agrupando los podcasts dinamicamente por la clave de su curso academico
   Widget _buildLista(bool isAdmin) {
     Map<String, List> grupos = {};
     for (var a in _audiosLocales!) {
@@ -281,6 +309,7 @@ class _ListadoScreenState extends State<ListadoScreen> {
       if (!grupos.containsKey(c)) grupos[c] = [];
       grupos[c]!.add(a);
     }
+    // ordenamos las pestañas desplegables para que los cursos mas nuevos salgan arriba del todo
     List<String> cursos = grupos.keys.toList()..sort((a, b) => b.compareTo(a));
 
     return ListView.builder(
@@ -290,20 +319,23 @@ class _ListadoScreenState extends State<ListadoScreen> {
         String curso = cursos[i];
         return ExpansionTile(
           initiallyExpanded: curso == _cursoMasReciente,
+          // despliega de forma automatica solo el curso actual
           title: Text(
             "Curso $curso",
             style: TextStyle(fontWeight: FontWeight.bold),
           ),
           children: grupos[curso]!.map((audio) {
+            // comprobamos si este audio especifico ya esta marcado en el array de escuchados
             bool escuchado =
                 _escuchados.contains("${audio['titulo']}-${audio['url']}") ||
-                    _escuchados.contains(audio['titulo']);
+                _escuchados.contains(audio['titulo']);
             String? youtubeUrl = audio['youtube'];
             bool estaBorrando = _urlBorrando == audio['url'];
 
             return ClipRect(
               child: Stack(
                 children: [
+                  // bloqueamos las pulsaciones y bajamos la opacidad de la celda si el programa se esta eliminando
                   IgnorePointer(
                     ignoring: estaBorrando,
                     child: Opacity(
@@ -324,6 +356,7 @@ class _ListadoScreenState extends State<ListadoScreen> {
                         trailing: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
+                            // si el mapa contiene enlace de video, pintamos el boton de youtube de color rojo
                             if (youtubeUrl != null && youtubeUrl.isNotEmpty)
                               IconButton(
                                 icon: FaIcon(
@@ -341,6 +374,7 @@ class _ListadoScreenState extends State<ListadoScreen> {
                                   }
                                 },
                               ),
+                            // si es admin le pintamos los indicadores visuales de edicion y borrado masivo
                             if (isAdmin) ...[
                               Icon(
                                 Icons.edit_note,
@@ -364,6 +398,7 @@ class _ListadoScreenState extends State<ListadoScreen> {
                           ],
                         ),
                         onTap: () async {
+                          // abrimos el reproductor pasandole la lista del bloque actual y la posicion elegida
                           await Navigator.push(
                             context,
                             MaterialPageRoute(
@@ -373,33 +408,36 @@ class _ListadoScreenState extends State<ListadoScreen> {
                               ),
                             ),
                           );
+                          // al regresar refrescamos los ticks verdes por si ha terminado de oir algun podcast
                           await _cargarEscuchadosFirebase();
                         },
+                        // modo atajo exclusivo para administradores: editar manteniendo pulsada la tarjeta
                         onLongPress: isAdmin
                             ? () async {
-                          Map? nuevoMapa = await Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (c) => AdminUploadScreen(
-                                programaAEditar: audio,
-                              ),
-                            ),
-                          );
-                          if (nuevoMapa != null) {
-                            setState(() {
-                              int idx = _audiosLocales!.indexWhere(
-                                    (e) => e['url'] == audio['url'],
-                              );
-                              if (idx != -1)
-                                _audiosLocales![idx] = nuevoMapa;
-                            });
-                            _inicializarLista();
-                          }
-                        }
+                                Map? nuevoMapa = await Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (c) => AdminUploadScreen(
+                                      programaAEditar: audio,
+                                    ),
+                                  ),
+                                );
+                                if (nuevoMapa != null) {
+                                  setState(() {
+                                    int idx = _audiosLocales!.indexWhere(
+                                      (e) => e['url'] == audio['url'],
+                                    );
+                                    if (idx != -1)
+                                      _audiosLocales![idx] = nuevoMapa;
+                                  });
+                                  _inicializarLista();
+                                }
+                              }
                             : null,
                       ),
                     ),
                   ),
+                  // capa visual superpuesta (backdropfilter) para emborronar la tarjeta mientras corre el borrado
                   if (estaBorrando)
                     Positioned.fill(
                       child: BackdropFilter(

@@ -2,12 +2,15 @@ import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+// usamos un statelesswidget porque esta pantalla es informativa y fija, no cambia su estado
 class QuienesSomosScreen extends StatelessWidget {
   const QuienesSomosScreen({super.key});
 
+  // metodo asincrono para lanzar el navegador o la app nativa de youtube con el canal
   Future<void> _abrirYoutube() async {
     final uri = Uri.parse("https://www.youtube.com/@OndaUrbanita");
     try {
+      // intentamos abrir la url en una aplicacion externa al sistema de la app
       await launchUrl(uri, mode: LaunchMode.externalApplication);
     } catch (e) {
       debugPrint("Error al abrir canal: $e");
@@ -31,6 +34,7 @@ class QuienesSomosScreen extends StatelessWidget {
       body: SingleChildScrollView(
         child: Column(
           children: [
+            // usamos un stack para superponer el contenedor naranja curvado y los textos del logotipo
             Stack(
               children: [
                 Container(
@@ -87,6 +91,7 @@ class QuienesSomosScreen extends StatelessWidget {
                   ),
                   SizedBox(height: 30),
 
+                  // bloques informativos construidos con el metodo reutilizable _infoSection
                   _infoSection(
                     Icons.history,
                     "Nuestra Historia",
@@ -109,6 +114,7 @@ class QuienesSomosScreen extends StatelessWidget {
                     ),
                   ),
                   SizedBox(height: 15),
+                  // listado de clasificaciones construido con el widget personalizado de filas
                   _buildListTile(
                     Icons.info,
                     "Informativos",
@@ -131,6 +137,7 @@ class QuienesSomosScreen extends StatelessWidget {
                   ),
 
                   SizedBox(height: 30),
+                  // tarjeta inferior contenedora para el enlace hacia el canal de youtube
                   Container(
                     padding: EdgeInsets.all(20),
                     decoration: BoxDecoration(
@@ -155,6 +162,7 @@ class QuienesSomosScreen extends StatelessWidget {
                             style: TextStyle(color: Colors.grey[700]),
                           ),
                           SizedBox(height: 15),
+                          // boton con icono de fontawesome para el branding oficial de youtube
                           ElevatedButton.icon(
                             onPressed: _abrirYoutube,
                             icon: Icon(
@@ -178,6 +186,7 @@ class QuienesSomosScreen extends StatelessWidget {
                   ),
 
                   SizedBox(height: 30),
+                  // creditos del proyecto requeridos para la presentacion formal del hito
                   Center(
                     child: Column(
                       children: [
@@ -224,6 +233,7 @@ class QuienesSomosScreen extends StatelessWidget {
     );
   }
 
+  // funcion que dibuja una fila con icono y textos formateados de forma limpia
   Widget _infoSection(IconData icon, String title, String text) {
     return Padding(
       padding: EdgeInsets.only(bottom: 25),
@@ -253,6 +263,7 @@ class QuienesSomosScreen extends StatelessWidget {
     );
   }
 
+  // funcion que genera las celdas de la lista de categorias usando filas simples alineadas
   Widget _buildListTile(IconData icon, String title, String desc) {
     return Padding(
       padding: EdgeInsets.only(bottom: 10),

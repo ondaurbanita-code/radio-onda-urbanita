@@ -18,9 +18,11 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
+  // variables para guardar los datos de sesion del usuario activo
   String? _rol;
   String? _nombreFirestore;
-  bool _cargandoDatos = true;
+  bool _cargandoDatos =
+      true; // controla si pintamos el circulo de carga al arrancar
 
   @override
   void initState() {
@@ -29,6 +31,7 @@ class _HomeScreenState extends State<HomeScreen> {
     _configurarNotificaciones();
   }
 
+  // configuracion de los permisos y la suscripcion a temas de firebase cloud messaging
   Future<void> _configurarNotificaciones() async {
     FirebaseMessaging messaging = FirebaseMessaging.instance;
 
@@ -52,19 +55,23 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
+  // controla el estado de la sesion del usuario y escucha si se desloguea o entra
   Future<void> _inicializarApp() async {
     User? user = FirebaseAuth.instance.currentUser;
     if (user != null) {
       await _cargarDatosUsuario(user);
     } else {
+      // si no hay nadie logueado quitamos el estado de carga para mostrar el modo invitado
       if (mounted) setState(() => _cargandoDatos = false);
     }
 
+    // listener en tiempo real que reacciona de forma automatica a los cambios de auth
     FirebaseAuth.instance.authStateChanges().listen((User? user) {
       if (mounted) {
         if (user != null) {
           _cargarDatosUsuario(user);
         } else {
+          // limpiamos variables si el usuario decide cerrar sesion
           setState(() {
             _rol = null;
             _nombreFirestore = null;
@@ -75,6 +82,7 @@ class _HomeScreenState extends State<HomeScreen> {
     });
   }
 
+  // recupera el rol y el nombre real del usuario de la coleccion de firestore usando su uid
   Future<void> _cargarDatosUsuario(User user) async {
     try {
       var doc = await FirebaseFirestore.instance
@@ -95,6 +103,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // si el stream o el future estan leyendo de la nube montamos una pantalla blanca con el spinner
     if (_cargandoDatos) {
       return Scaffold(
         body: Center(child: CircularProgressIndicator(color: Colors.orange)),
@@ -102,10 +111,12 @@ class _HomeScreenState extends State<HomeScreen> {
     }
 
     final user = FirebaseAuth.instance.currentUser;
+    // booleano clave para alternar que se pinten o no las opciones administrativas
     bool tienePermisos = _rol == 'admin' || _rol == 'superadmin';
 
     return Scaffold(
       backgroundColor: Colors.grey[50],
+      // inyectamos el widget personalizado del drawer pasandole los datos del usuario logueado
       drawer: CustomDrawer(rol: _rol, nombre: _nombreFirestore),
       appBar: AppBar(
         backgroundColor: Colors.white,
@@ -114,6 +125,7 @@ class _HomeScreenState extends State<HomeScreen> {
         title: Image.asset('assets/logo.png', height: 45),
         centerTitle: true,
         actions: [
+          // mostramos de forma condicional el boton de subir audios si es administrador
           if (tienePermisos)
             IconButton(
               icon: Icon(Icons.add_box_outlined, color: Colors.orange),
@@ -122,6 +134,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 MaterialPageRoute(builder: (c) => AdminUploadScreen()),
               ),
             ),
+          // si entra como anonimo, le pintamos el atajo rapido para ir a la vista de login
           if (user == null)
             TextButton(
               onPressed: () => Navigator.push(
@@ -139,6 +152,7 @@ class _HomeScreenState extends State<HomeScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // cabecera de bienvenida curvada en la parte inferior usando decoration
             Container(
               width: double.infinity,
               padding: EdgeInsets.all(30),
@@ -178,6 +192,7 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             ),
             SizedBox(height: 30),
+            // menu de accesos directos principal construido usando nuestra funcion reutilizable
             Padding(
               padding: EdgeInsets.symmetric(horizontal: 20),
               child: Column(
@@ -211,6 +226,7 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  // widget personalizado reutilizable para no repetir codigo en los botones del menu principal
   Widget sectionButton(
     String text,
     String subtext,
@@ -219,6 +235,7 @@ class _HomeScreenState extends State<HomeScreen> {
   ) {
     return GestureDetector(
       onTap: () {
+        // enrutamiento condicional segun el texto identificativo del boton pulsado
         if (text == "Programas de radio") {
           Navigator.push(
             context,
